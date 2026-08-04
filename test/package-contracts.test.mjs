@@ -29,7 +29,12 @@ const entryPoints = [
 
 test("release manifests and README agree on the valid release candidate", () => {
   assert.doesNotThrow(() => assertReleaseManifests(packageJson, packageLock));
-  assert.equal(packageJson.version, "0.1.0-rc.1");
+  assert.equal(packageJson.version, "0.1.0-rc.2");
+  assert.equal(
+    packageJson.scripts.prepare,
+    "npm run build",
+    "Git dependencies must build dist before npm packs the checkout",
+  );
   assert.match(
     readme,
     new RegExp(`@handrail/bug-reporter@${packageJson.version.replaceAll(".", "\\.")}`),
@@ -234,13 +239,14 @@ test("metadata is complete, immutable, and authoritative per runtime", async () 
 });
 
 test("npm pack contains matching metadata and every public export", () => {
-  const result = JSON.parse(
-    execFileSync(
-      "npm",
-      ["pack", "--dry-run", "--json", "--ignore-scripts"],
-      { cwd: repositoryRoot, encoding: "utf8" },
-    ),
-  )[0];
+  const packOutput = execFileSync(
+    "npm",
+    ["pack", "--dry-run", "--json", "--silent"],
+    { cwd: repositoryRoot, encoding: "utf8" },
+  );
+  const jsonStart = packOutput.indexOf('[\n  {\n    "id":');
+  assert.ok(jsonStart >= 0, "npm pack must emit its JSON manifest after prepare");
+  const result = JSON.parse(packOutput.slice(jsonStart))[0];
   assert.equal(result.name, packageJson.name);
   assert.equal(result.version, packageJson.version);
   assert.equal(result.id, `${packageJson.name}@${packageJson.version}`);

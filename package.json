@@ -1,6 +1,6 @@
 {
   "name": "@handrail/bug-reporter",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.NaN",
   "description": "Browser-safe, server, and headless React bug reporter integrations for Handrail",
   "license": "UNLICENSED",
   "type": "module",
@@ -54,7 +54,7 @@
     "pretest": "npm run build",
     "test": "node --test test/*.test.mjs",
     "check": "npm run build && npm run typecheck && tsc --noEmit -p tsconfig.contracts.json && node --test test/*.test.mjs && npm pack --dry-run",
-    "prepack": "npm run build",
+    "prepare": "npm run build",
     "prepublishOnly": "npm run check"
   },
   "peerDependencies": {

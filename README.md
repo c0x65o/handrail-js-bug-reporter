@@ -4,7 +4,7 @@ Framework-neutral JavaScript bug-reporting primitives for Handrail. The package
 has separate browser, Node/server, and headless React entry points and stamps
 reports with immutable SDK release identity.
 
-This repository currently builds the `0.1.0-rc.1` release candidate. It is not
+This repository currently builds the `0.1.0-rc.2` release candidate. It is not
 published yet.
 
 ## Installation
@@ -12,7 +12,7 @@ published yet.
 After the release candidate is published, install the exact version:
 
 ```sh
-npm install @handrail/bug-reporter@0.1.0-rc.1
+npm install @handrail/bug-reporter@0.1.0-rc.2
 ```
 
 For local evaluation before publication, build and pack this checkout, then
@@ -22,7 +22,7 @@ install the resulting tarball in a test application:
 npm ci
 npm run build
 npm pack
-npm install /path/to/handrail-bug-reporter-0.1.0-rc.1.tgz
+npm install /path/to/handrail-bug-reporter-0.1.0-rc.2.tgz
 ```
 
 React applications must already provide React 18 or newer. React is a peer
@@ -308,7 +308,7 @@ commit and immutable tag explicitly:
 
 ```sh
 HANDRAIL_BUG_REPORTER_SDK_COMMIT="$(git rev-parse HEAD)" \
-HANDRAIL_BUG_REPORTER_SDK_REF="refs/tags/v0.1.0-rc.1" \
+HANDRAIL_BUG_REPORTER_SDK_REF="refs/tags/v0.1.0-rc.2" \
 npm run build
 ```
 
