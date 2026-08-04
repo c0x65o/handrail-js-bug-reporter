@@ -5,18 +5,94 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import {
+  assertReleaseIdentity,
+  assertReleaseManifests,
+  resolveReleaseRef,
+} from "../scripts/release-contract.mjs";
 
 const require = createRequire(import.meta.url);
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const packageJson = JSON.parse(
   await readFile(new URL("../package.json", import.meta.url), "utf8"),
 );
+const packageLock = JSON.parse(
+  await readFile(new URL("../package-lock.json", import.meta.url), "utf8"),
+);
+const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
 
 const entryPoints = [
   ["@handrail/bug-reporter", "browser", "browser"],
   ["@handrail/bug-reporter/server", "node", "node"],
   ["@handrail/bug-reporter/react", "react", "browser"],
 ];
+
+test("release manifests and README agree on the valid release candidate", () => {
+  assert.doesNotThrow(() => assertReleaseManifests(packageJson, packageLock));
+  assert.equal(packageJson.version, "0.1.0-rc.1");
+  assert.match(
+    readme,
+    new RegExp(`@handrail/bug-reporter@${packageJson.version.replaceAll(".", "\\.")}`),
+  );
+  assert.doesNotMatch(readme, /0\.1\.NaN/);
+});
+
+test("release contracts reject malformed and inconsistent metadata", () => {
+  assert.throws(
+    () =>
+      assertReleaseManifests(
+        { ...packageJson, version: "0.1.NaN" },
+        packageLock,
+      ),
+    /valid SemVer/,
+  );
+  assert.throws(
+    () =>
+      assertReleaseManifests(packageJson, {
+        ...packageLock,
+        packages: {
+          ...packageLock.packages,
+          "": { ...packageLock.packages[""], version: "0.1.NaN" },
+        },
+      }),
+    /must match package\.json/,
+  );
+  assert.throws(
+    () =>
+      assertReleaseIdentity(
+        {
+          commit: "a".repeat(40),
+          packageName: packageJson.name,
+          packageVersion: "0.1.NaN",
+          releaseRef: `commit:${"b".repeat(40)}`,
+        },
+        packageJson,
+      ),
+    /must match package\.json/,
+  );
+  assert.throws(
+    () =>
+      assertReleaseIdentity(
+        {
+          commit: "a".repeat(40),
+          packageName: packageJson.name,
+          packageVersion: packageJson.version,
+          releaseRef: `commit:${"b".repeat(40)}`,
+        },
+        packageJson,
+      ),
+    /this commit or the canonical version tag/,
+  );
+  assert.equal(
+    resolveReleaseRef({
+      commit: "a".repeat(40),
+      exactTag: undefined,
+      explicitRef: undefined,
+      version: packageJson.version,
+    }),
+    `commit:${"a".repeat(40)}`,
+  );
+});
 
 test("package exports resolve for ESM and CommonJS", async () => {
   assert.deepEqual(Object.keys(packageJson.exports), [
@@ -83,17 +159,48 @@ test("release generation rejects moving branch refs", () => {
     },
   );
   assert.notEqual(result.status, 0);
-  assert.match(`${result.stdout}\n${result.stderr}`, /immutable tag or commit/);
+  assert.match(
+    `${result.stdout}\n${result.stderr}`,
+    /this commit or the canonical version tag/,
+  );
 });
 
 test("metadata is complete, immutable, and authoritative per runtime", async () => {
+  const expectedCommit =
+    process.env.HANDRAIL_BUG_REPORTER_SDK_COMMIT?.trim() ||
+    execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+    }).trim();
+  const exactTagResult = spawnSync(
+    "git",
+    ["describe", "--exact-match", "--tags", expectedCommit],
+    { cwd: repositoryRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+  );
+  const exactTag =
+    exactTagResult.status === 0 ? exactTagResult.stdout.trim() : undefined;
+  const expectedRef = resolveReleaseRef({
+    commit: expectedCommit,
+    exactTag,
+    explicitRef: process.env.HANDRAIL_BUG_REPORTER_SDK_REF?.trim() || undefined,
+    version: packageJson.version,
+  });
+
   for (const [specifier, runtime, platform] of entryPoints) {
     const loaded = await import(specifier);
     assert.ok(Object.isFrozen(loaded.SDK_IDENTITY));
-    assert.match(loaded.SDK_COMMIT, /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
-    assert.match(
-      loaded.SDK_RELEASE_REF,
-      /^(?:refs\/tags\/\S+|commit:(?:[0-9a-f]{40}|[0-9a-f]{64})|(?:[0-9a-f]{40}|[0-9a-f]{64})|v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/i,
+    assert.equal(loaded.SDK_COMMIT, expectedCommit);
+    assert.equal(loaded.SDK_RELEASE_REF, expectedRef);
+    assert.doesNotThrow(() =>
+      assertReleaseIdentity(
+        {
+          commit: loaded.SDK_COMMIT,
+          packageName: loaded.SDK_NAME,
+          packageVersion: loaded.SDK_VERSION,
+          releaseRef: loaded.SDK_RELEASE_REF,
+        },
+        packageJson,
+      ),
     );
 
     const input = {
@@ -123,5 +230,33 @@ test("metadata is complete, immutable, and authoritative per runtime", async () 
       reporter_sdk_commit: loaded.SDK_COMMIT,
       reporter_sdk_ref: loaded.SDK_RELEASE_REF,
     });
+  }
+});
+
+test("npm pack contains matching metadata and every public export", () => {
+  const result = JSON.parse(
+    execFileSync(
+      "npm",
+      ["pack", "--dry-run", "--json", "--ignore-scripts"],
+      { cwd: repositoryRoot, encoding: "utf8" },
+    ),
+  )[0];
+  assert.equal(result.name, packageJson.name);
+  assert.equal(result.version, packageJson.version);
+  assert.equal(result.id, `${packageJson.name}@${packageJson.version}`);
+  assert.equal(result.filename, `handrail-bug-reporter-${packageJson.version}.tgz`);
+
+  const packedPaths = new Set(result.files.map(({ path }) => path));
+  assert.ok(packedPaths.has("package.json"));
+  assert.ok(packedPaths.has("README.md"));
+  for (const exportValue of Object.values(packageJson.exports).slice(0, 3)) {
+    for (const format of ["import", "require"]) {
+      assert.ok(
+        packedPaths.has(exportValue[format].types.replace(/^\.\//, "")),
+      );
+      assert.ok(
+        packedPaths.has(exportValue[format].default.replace(/^\.\//, "")),
+      );
+    }
   }
 });

@@ -313,6 +313,7 @@ npm run build
 ```
 
 The release ref must be an immutable tag or commit reference, never a moving
-branch such as `main`. `npm run check` verifies package exports, syntax, type
-contracts, browser safety, and stamped metadata. Publishing is intentionally
-outside this repository task.
+branch such as `main`. `npm run check` verifies package and lockfile version
+agreement, package exports, syntax, type contracts, browser safety, stamped
+metadata, and packed contents. Publishing is intentionally outside this
+repository task.
