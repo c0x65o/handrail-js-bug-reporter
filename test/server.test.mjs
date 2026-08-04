@@ -1,0 +1,321 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import { createBugReporter as createBrowserBugReporter } from "@handrail/bug-reporter";
+import {
+  APPLICATION_SESSION_TOKEN_HEADER,
+  createRequestScopedBugReporter,
+  createSameOriginBugReporterHandler,
+} from "@handrail/bug-reporter/server";
+
+const policy = {
+  schema_version: 1,
+  project_id: "project-123",
+  environment: "staging",
+  reporter: { identity_verified: true, access_level: "full_access" },
+  ask_options: [{ key: "fix", label: "Fix" }],
+};
+
+function jsonResponse(body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+function sharedConfig(overrides = {}) {
+  return {
+    apiBaseUrl: "https://handrail.example/api",
+    projectId: "project-123",
+    environment: "staging",
+    reportToken: "server-report-secret",
+    retry: { maxAttempts: 1, delayMs: 0 },
+    ...overrides,
+  };
+}
+
+test("request-scoped reporters resolve fresh identity without cross-request leakage", async () => {
+  const requests = [];
+  const factory = createRequestScopedBugReporter(
+    sharedConfig({
+      resolveApplicationSessionToken: (request) => request.session,
+      fetch: async (_url, init) => {
+        requests.push(init);
+        return init.method === "GET"
+          ? jsonResponse(policy)
+          : jsonResponse({ bug_id: "bug-123" }, 201);
+      },
+    }),
+  );
+  const firstRequest = { session: "request-one-policy" };
+  const secondRequest = { session: "request-two-submit" };
+  const first = factory.forRequest(firstRequest);
+  const second = factory.forRequest(secondRequest);
+
+  assert.ok(await first.discoverPolicy());
+  firstRequest.session = "request-one-submit";
+  await first.submit(
+    { title: "First", description: "First request" },
+    { automationRequests: ["fix"] },
+  );
+  await second.submit({ title: "Second", description: "Second request" });
+
+  assert.deepEqual(
+    requests.map(
+      (request) => request.headers[APPLICATION_SESSION_TOKEN_HEADER],
+    ),
+    ["request-one-policy", "request-one-submit", "request-two-submit"],
+  );
+  assert.equal(JSON.parse(requests[1].body).reporter_sdk_runtime, "node");
+  assert.equal(JSON.parse(requests[1].body).automation_requests.fix, true);
+  assert.doesNotMatch(
+    requests.filter((request) => request.body).map((request) => request.body).join("\n"),
+    /request-one|request-two/,
+  );
+});
+
+test("request-scoped reporting remains vanilla when identity is unavailable", async () => {
+  let submission;
+  const factory = createRequestScopedBugReporter(
+    sharedConfig({
+      fetch: async (_url, init) => {
+        if (init.method === "GET") {
+          return jsonResponse({
+            ...policy,
+            reporter: { identity_verified: false, access_level: "default" },
+          });
+        }
+        submission = init;
+        return jsonResponse({ bug_id: "vanilla" }, 201);
+      },
+    }),
+  );
+  const reporter = factory.forRequest({ user: null });
+  assert.equal(await reporter.discoverPolicy(), null);
+  await reporter.submit(
+    { title: "Vanilla", description: "No application identity" },
+    { automationRequests: ["fix"] },
+  );
+  assert.equal(
+    submission.headers[APPLICATION_SESSION_TOKEN_HEADER],
+    undefined,
+  );
+  assert.equal(JSON.parse(submission.body).automation_requests, undefined);
+});
+
+test("same-origin forwarding keeps HttpOnly cookies and server secrets out of browser code", async () => {
+  const upstreamRequests = [];
+  let identityCall = 0;
+  const handler = createSameOriginBugReporterHandler(
+    sharedConfig({
+      resolveApplicationSessionToken: (request) => {
+        assert.equal(request.headers.get("cookie"), "app_session=http-only-value");
+        identityCall += 1;
+        return `resolved-request-${identityCall}`;
+      },
+      fetch: async (url, init) => {
+        upstreamRequests.push({ url: String(url), init });
+        assert.equal(init.headers.cookie, undefined);
+        return init.method === "GET"
+          ? jsonResponse(policy)
+          : jsonResponse({ bug_id: "forwarded" }, 201);
+      },
+    }),
+  );
+
+  const browserRequests = [];
+  const sameOriginFetch = async (url, init) => {
+    browserRequests.push({ url, init });
+    const headers = new Headers(init.headers);
+    // The user agent adds an HttpOnly cookie; application JavaScript never sees it.
+    headers.set("cookie", "app_session=http-only-value");
+    return handler(
+      new Request(`https://app.example${url}`, { ...init, headers }),
+    );
+  };
+  const browserReporter = createBrowserBugReporter({
+    apiBaseUrl: "/api",
+    projectId: "project-123",
+    environment: "staging",
+    transport: "same-origin",
+    fetch: sameOriginFetch,
+  });
+
+  assert.equal(browserReporter.configuration.status, "ready");
+  assert.equal(browserReporter.configuration.hasReportToken, false);
+  assert.ok(await browserReporter.discoverPolicy());
+  await browserReporter.submit(
+    {
+      title: "Forwarded issue",
+      description: "Uses an HttpOnly application session.",
+      route: "/settings",
+    },
+    { automationRequests: ["fix"] },
+  );
+
+  assert.equal(browserRequests.length, 2);
+  for (const request of browserRequests) {
+    assert.equal(request.init.credentials, "same-origin");
+    assert.equal(request.init.headers.authorization, undefined);
+    assert.equal(
+      request.init.headers[APPLICATION_SESSION_TOKEN_HEADER],
+      undefined,
+    );
+  }
+  assert.equal(upstreamRequests.length, 2);
+  assert.equal(
+    upstreamRequests[0].init.headers[APPLICATION_SESSION_TOKEN_HEADER],
+    "resolved-request-1",
+  );
+  assert.equal(
+    upstreamRequests[1].init.headers[APPLICATION_SESSION_TOKEN_HEADER],
+    "resolved-request-2",
+  );
+  assert.equal(
+    upstreamRequests[1].init.headers.authorization,
+    "Bearer server-report-secret",
+  );
+  const forwardedBody = JSON.parse(upstreamRequests[1].init.body);
+  assert.equal(forwardedBody.automation_requests.fix, true);
+  assert.equal(forwardedBody.reporter_sdk_runtime, "browser");
+  assert.doesNotMatch(
+    upstreamRequests[1].init.body,
+    /server-report-secret|http-only-value|resolved-request/,
+  );
+});
+
+test("same-origin browser mode rejects browser-held secrets and preserves core payload behavior", async () => {
+  let forwardedBody;
+  const handler = createSameOriginBugReporterHandler(
+    sharedConfig({
+      resolveApplicationSessionToken: () => "forward-session",
+      fetch: async (_url, init) => {
+        if (init.method === "GET") return jsonResponse(policy);
+        forwardedBody = JSON.parse(init.body);
+        return jsonResponse({ bug_id: "forward" }, 201);
+      },
+    }),
+  );
+  const forwarded = createBrowserBugReporter({
+    apiBaseUrl: "/api",
+    projectId: "project-123",
+    environment: "staging",
+    transport: "same-origin",
+    fetch: (url, init) =>
+      handler(new Request(`https://app.example${url}`, init)),
+  });
+  const input = {
+    title: "Equivalent",
+    description: "Same browser payload",
+    route: "/equivalent",
+    metadata: { safe: true },
+  };
+  await forwarded.discoverPolicy();
+  await forwarded.submit(input, { automationRequests: ["fix"] });
+
+  let directBody;
+  let directCall = 0;
+  const direct = createBrowserBugReporter({
+    ...sharedConfig({
+      applicationSessionTokenProvider: () => "direct-session",
+      fetch: async (_url, init) => {
+        directCall += 1;
+        if (directCall === 1) return jsonResponse(policy);
+        directBody = JSON.parse(init.body);
+        return jsonResponse({ bug_id: "direct" }, 201);
+      },
+    }),
+  });
+  await direct.discoverPolicy();
+  await direct.submit(input, { automationRequests: ["fix"] });
+  delete forwardedBody.event_id;
+  delete directBody.event_id;
+  assert.deepEqual(forwardedBody, directBody);
+
+  const unsafeBrowserConfig = createBrowserBugReporter({
+    apiBaseUrl: "/api",
+    projectId: "project-123",
+    environment: "staging",
+    transport: "same-origin",
+    reportToken: "must-not-be-in-browser",
+  });
+  assert.equal(unsafeBrowserConfig.configuration.status, "misconfigured");
+});
+
+test("same-origin forwarding ignores spoofed auth and redacts incidental session material", async () => {
+  let upstream;
+  const handler = createSameOriginBugReporterHandler(
+    sharedConfig({
+      resolveApplicationSessionToken: () => "server-resolved-session",
+      fetch: async (_url, init) => {
+        upstream = init;
+        return new Response("upstream echoed server-resolved-session", {
+          status: 401,
+        });
+      },
+    }),
+  );
+  const response = await handler(
+    new Request("https://app.example/api/mobile-bug-reports", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer browser-spoof",
+        "content-type": "application/json",
+        [APPLICATION_SESSION_TOKEN_HEADER]: "browser-session-spoof",
+        cookie: "app_session=http-only-cookie",
+      },
+      body: JSON.stringify({
+        title: "Boundary",
+        description: "Do not leak credentials",
+        project_id: "attacker-project",
+        environment: "production",
+        metadata: { sessionToken: "accidentally-copied-session" },
+      }),
+    }),
+  );
+
+  assert.equal(upstream.headers.authorization, "Bearer server-report-secret");
+  assert.equal(
+    upstream.headers[APPLICATION_SESSION_TOKEN_HEADER],
+    "server-resolved-session",
+  );
+  assert.equal(upstream.headers.cookie, undefined);
+  const body = JSON.parse(upstream.body);
+  assert.equal(body.project_id, "project-123");
+  assert.equal(body.environment, "staging");
+  assert.equal(body.metadata.sessionToken, "[REDACTED]");
+  assert.doesNotMatch(
+    upstream.body,
+    /browser-spoof|browser-session-spoof|http-only-cookie|accidentally-copied-session|server-resolved-session/,
+  );
+  assert.equal(response.status, 401);
+  assert.deepEqual(await response.json(), { error: "bug_reporting_rejected" });
+});
+
+test("same-origin submission falls back to vanilla when request identity disappears", async () => {
+  let upstreamBody;
+  const handler = createSameOriginBugReporterHandler(
+    sharedConfig({
+      resolveApplicationSessionToken: () => {
+        throw new Error("session expired");
+      },
+      fetch: async (_url, init) => {
+        upstreamBody = JSON.parse(init.body);
+        return jsonResponse({ bug_id: "vanilla-forward" }, 201);
+      },
+    }),
+  );
+  const response = await handler(
+    new Request("https://app.example/api/mobile-bug-reports", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        title: "Expired identity",
+        description: "Still submit the report",
+        automation_requests: { fix: true },
+      }),
+    }),
+  );
+  assert.equal(response.status, 201);
+  assert.equal(upstreamBody.automation_requests, undefined);
+});

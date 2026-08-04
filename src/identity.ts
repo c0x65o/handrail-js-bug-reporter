@@ -23,8 +23,8 @@ export interface ReporterSdkIdentity<
   readonly reporter_sdk_runtime: Runtime;
   readonly reporter_sdk_package: typeof SDK_NAME;
   readonly reporter_sdk_version: typeof SDK_VERSION;
-  readonly reporter_sdk_commit: string;
-  readonly reporter_sdk_ref: string;
+  readonly reporter_sdk_commit: typeof SDK_COMMIT;
+  readonly reporter_sdk_ref: typeof SDK_RELEASE_REF;
 }
 
 export type StampedBugReport<
@@ -55,8 +55,14 @@ export function stampReportWithIdentity<
   T extends Readonly<Record<string, unknown>>,
   const Identity extends ReporterSdkIdentity,
 >(report: T, identity: Identity): StampedBugReport<T, Identity> {
-  return {
-    ...report,
-    ...identity,
-  } as StampedBugReport<T, Identity>;
+  const stamped = { ...report } as StampedBugReport<T, Identity>;
+  for (const [key, value] of Object.entries(identity)) {
+    Object.defineProperty(stamped, key, {
+      configurable: false,
+      enumerable: true,
+      value,
+      writable: false,
+    });
+  }
+  return stamped;
 }

@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
 const require = createRequire(import.meta.url);
+const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const packageJson = JSON.parse(
   await readFile(new URL("../package.json", import.meta.url), "utf8"),
 );
@@ -42,7 +44,7 @@ test("all emitted JavaScript has valid syntax", () => {
   for (const exportValue of Object.values(packageJson.exports).slice(0, 3)) {
     for (const format of ["import", "require"]) {
       execFileSync(process.execPath, ["--check", exportValue[format].default], {
-        cwd: new URL("..", import.meta.url),
+        cwd: repositoryRoot,
         stdio: "pipe",
       });
     }
@@ -57,7 +59,7 @@ test("the browser entry bundles without Node runtime dependencies", async () => 
     stdin: {
       contents:
         'import { stampReport } from "@handrail/bug-reporter"; export default stampReport({ title: "test" });',
-      resolveDir: new URL("..", import.meta.url).pathname,
+      resolveDir: repositoryRoot,
       sourcefile: "browser-consumer.mjs",
     },
     write: false,
@@ -67,12 +69,32 @@ test("the browser entry bundles without Node runtime dependencies", async () => 
   assert.doesNotMatch(output, /(?:from|import\s*)[ (]*["'](?:fs|path|url|module|child_process)["']/);
 });
 
+test("release generation rejects moving branch refs", () => {
+  const result = spawnSync(
+    process.execPath,
+    ["./scripts/generate-release.mjs"],
+    {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        HANDRAIL_BUG_REPORTER_SDK_REF: "main",
+      },
+    },
+  );
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stdout}\n${result.stderr}`, /immutable tag or commit/);
+});
+
 test("metadata is complete, immutable, and authoritative per runtime", async () => {
   for (const [specifier, runtime, platform] of entryPoints) {
     const loaded = await import(specifier);
     assert.ok(Object.isFrozen(loaded.SDK_IDENTITY));
-    assert.match(loaded.SDK_COMMIT, /^(?:[0-9a-f]{40}|unknown)$/);
-    assert.ok(loaded.SDK_RELEASE_REF.length > 0);
+    assert.match(loaded.SDK_COMMIT, /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
+    assert.match(
+      loaded.SDK_RELEASE_REF,
+      /^(?:refs\/tags\/\S+|commit:(?:[0-9a-f]{40}|[0-9a-f]{64})|(?:[0-9a-f]{40}|[0-9a-f]{64})|v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/i,
+    );
 
     const input = {
       title: "Example",
@@ -88,6 +110,9 @@ test("metadata is complete, immutable, and authoritative per runtime", async () 
 
     assert.notEqual(report, input);
     assert.equal(input.source, "caller_override");
+    assert.throws(() => {
+      report.reporter_sdk_version = "mutated_after_stamping";
+    }, TypeError);
     assert.deepEqual(report, {
       title: "Example",
       source: "node_web_bug_reporter",

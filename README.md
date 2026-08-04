@@ -42,40 +42,241 @@ const report = stampReport({
 });
 ```
 
-Server code uses the isolated server entry point:
+It also provides policy discovery and JSON submission against Handrail's
+existing bug-report intake:
 
 ```ts
-import { stampReport } from "@handrail/bug-reporter/server";
+import { createBugReporter } from "@handrail/bug-reporter";
 
-const report = stampReport({
-  title: "Invoice job failed",
-  route: "/jobs/invoices",
+const reporter = createBugReporter({
+  apiBaseUrl: "https://dashboard.handrail-daas.com/api",
+  projectId: "your-immutable-project-id",
+  environment: "staging",
+  reportToken: "your-public-report-token",
+  applicationSessionTokenProvider: async () =>
+    applicationAuth.currentSession?.rawToken ?? null,
+});
+
+// Best effort. A null result means the UI should show only vanilla reporting.
+const policy = await reporter.discoverPolicy();
+
+await reporter.submit(
+  {
+    title: "Checkout button does not respond",
+    description: "Clicking Continue has no visible effect.",
+    route: window.location.pathname,
+    metadata: { viewport: `${window.innerWidth}x${window.innerHeight}` },
+  },
+  {
+    // Render and select keys only from policy?.askOptions.
+    automationRequests: policy?.askOptions.map((option) => option.key),
+  },
+);
+```
+
+The direct browser provider example applies only when the application already
+exposes a browser-readable session token. Use the same-origin forwarding
+pattern below for HttpOnly cookies; never weaken an HttpOnly session to satisfy
+this API.
+
+`apiBaseUrl` accepts a Handrail origin such as
+`https://dashboard.handrail-daas.com`, an API base ending in `/api`, a
+same-origin `/api` path, or the complete `/api/mobile-bug-reports` endpoint.
+All forms normalize to the existing intake and `/policy` routes without
+duplicating `/api`.
+
+Create an explicitly disabled, no-network reporter with
+`createBugReporter({ enabled: false })`. Its configuration status is
+`disabled`, policy discovery returns `null`, and submission returns
+`{ status: "disabled" }`. An enabled reporter with incomplete or invalid
+configuration has `configuration.status === "misconfigured"`; it makes no
+request and submission throws a generic `BugReporterError`.
+
+### Identity and policy safety
+
+`applicationSessionTokenProvider` is invoked immediately before every policy
+or submission request, including each retry. Its current non-blank result is
+sent only in `x-handrail-application-session-token`. The SDK never adds it to a
+payload, configuration snapshot, stored policy, retry body, error, log,
+storage, or analytics event. If the provider is missing, returns no session,
+or throws, ordinary bug reporting continues without verified attribution.
+
+Policy discovery is best effort and never downloads Known Users. The SDK
+accepts only a version-1 response for the configured project and environment
+whose reporter identity is server-verified. It ignores unknown automation
+keys and uses this fixed allowlist:
+
+- `auto_verify`
+- `repair_proposal`
+- `fix`
+- `deploy_staging`
+- `deploy_production`
+
+Submission intersects caller selections with the most recently verified
+policy response. When there is no verified current policy or no current
+session at submission time, it omits `automation_requests` and submits a
+vanilla report. Handrail remains the authority that re-verifies identity,
+classifies risk, and applies workflow and deployment gates.
+
+### Redaction, screenshots, retries, and errors
+
+The SDK recursively replaces values under sensitive keys such as tokens,
+cookies, authorization, passwords, credentials, session data, private keys,
+and payment-card fields with `[REDACTED]`. Add application-specific hooks with
+`redactionHooks`; each hook receives an already-sanitized JSON report and must
+return the complete report. Built-in redaction runs again after every hook so
+a hook cannot accidentally reintroduce a sensitive-key value.
+
+Screenshots are disabled unless `allowScreenshots: true` is configured. A
+report can then include one `screenshot` as a `Blob`, `ArrayBuffer`, typed
+array, base64 string, or data URL. The SDK accepts only signature-matching
+`image/png` and `image/jpeg`, strips unsafe filename characters, and rejects
+decoded data larger than Handrail intake's 20 MiB limit before making a
+request:
+
+```ts
+await reporter.submit({
+  title: "Layout overlaps",
+  description: "The controls overlap at tablet width.",
+  screenshot: {
+    data: pastedImageFile,
+    mimeType: "image/png",
+    filename: "checkout-layout.png",
+  },
 });
 ```
 
-The React entry point is headless. Its provider only exposes immutable SDK
-identity; report form and policy state will be added without imposing rendered
-UI:
+Retries are opt-in through `retry.maxAttempts` (maximum 3). The SDK retries
+network failures and transient HTTP statuses, re-resolves the application
+session for every attempt, and reuses an intake `event_id` so a response-loss
+retry remains idempotent. Retry bodies never contain the application session.
+Error messages do not include provider exceptions, response bodies, request
+data, tokens, or screenshots; callers may use the safe `code` and optional
+HTTP `statusCode` fields on `BugReporterError`.
+
+Server code uses the isolated server entry point:
+
+```ts
+import { createRequestScopedBugReporter } from "@handrail/bug-reporter/server";
+
+const requestReporters = createRequestScopedBugReporter<AppRequest>({
+  apiBaseUrl: process.env.HANDRAIL_API_URL,
+  projectId: process.env.HANDRAIL_PROJECT_ID,
+  environment: process.env.APP_ENVIRONMENT,
+  reportToken: process.env.HANDRAIL_BUG_REPORT_TOKEN,
+  // Authenticate the request using the application's normal server code.
+  // Return only the current Handrail application-session token.
+  resolveApplicationSessionToken: async (request) =>
+    (await authenticate(request))?.applicationSessionToken ?? null,
+});
+
+export async function reportServerIssue(request: AppRequest) {
+  // Construct this client inside the request. No identity is cached globally.
+  return requestReporters.forRequest(request).submit({
+    title: "Invoice job failed",
+    description: "The invoice worker stopped before delivery.",
+    route: "/jobs/invoices",
+  });
+}
+```
+
+The resolver runs immediately before every Handrail policy/submission attempt.
+The factory retains neither its result nor a prior request, so a long-lived
+factory is safe while every returned reporter remains request-local. If the
+resolver returns nothing or throws, submission continues as a vanilla report.
+
+### HttpOnly sessions and same-origin forwarding
+
+When the application session is held in an HttpOnly cookie, browser JavaScript
+must not read or copy it. Mount a Web `Request`/`Response` forwarding handler
+on the application server at `/api/mobile-bug-reports` and its `/policy` child:
+
+```ts
+import {
+  createSameOriginBugReporterHandler,
+} from "@handrail/bug-reporter/server";
+
+export const handleBugReport = createSameOriginBugReporterHandler({
+  apiBaseUrl: process.env.HANDRAIL_API_URL,
+  projectId: process.env.HANDRAIL_PROJECT_ID,
+  environment: process.env.APP_ENVIRONMENT,
+  reportToken: process.env.HANDRAIL_BUG_REPORT_TOKEN,
+  resolveApplicationSessionToken: async (request) =>
+    (await authenticateHttpOnlyCookie(request))?.applicationSessionToken ?? null,
+});
+```
+
+Adapt the framework's incoming request to a Web `Request` if necessary and
+return the handler's Web `Response`. The handler ignores inbound cookies,
+authorization, report-token, and application-session headers when contacting
+Handrail. It resolves identity from that one request, adds server-owned headers
+upstream, and returns only a narrow JSON response. Server errors are generic.
+
+The corresponding browser configuration contains no report or session token:
+
+```ts
+const reporter = createBugReporter({
+  apiBaseUrl: "/api",
+  projectId: "your-immutable-project-id",
+  environment: "staging",
+  transport: "same-origin",
+});
+```
+
+Same-origin mode accepts only an absolute-path `apiBaseUrl`, sends credentials
+with same-origin semantics, and is deliberately misconfigured if a report
+token or application-session provider is placed in browser configuration.
+
+### Headless React adoption
+
+The React entry point owns state but renders no UI. Keep its configuration
+object stable so the provider represents one reporter instance:
 
 ```tsx
+import { useMemo } from "react";
 import {
-  HandrailBugReporterIdentityProvider,
-  useHandrailBugReporterIdentity,
+  HandrailBugReporterProvider,
+  useHandrailBugReporter,
 } from "@handrail/bug-reporter/react";
 
-function Diagnostics() {
-  const identity = useHandrailBugReporterIdentity();
-  return <code>{identity.reporter_sdk_version}</code>;
+function BugReportForm() {
+  const bugReport = useHandrailBugReporter();
+
+  // Bind these headless values/actions to the application's own components:
+  // bugReport.form / setForm / updateForm
+  // bugReport.policyStatus / isVanilla / automationOptions
+  // bugReport.setAutomationRequest
+  // bugReport.replaceScreenshot / removeScreenshot / canAttachScreenshot
+  // bugReport.submission / submit / resetSubmission
+  return null;
 }
 
 function App() {
+  const bugReporterConfig = useMemo(() => ({
+    apiBaseUrl: "/api",
+    projectId: "your-immutable-project-id",
+    environment: "staging",
+    transport: "same-origin" as const,
+    allowScreenshots: true,
+  }), []);
+
   return (
-    <HandrailBugReporterIdentityProvider>
-      <Diagnostics />
-    </HandrailBugReporterIdentityProvider>
+    <HandrailBugReporterProvider
+      config={bugReporterConfig}
+      initialForm={{ route: window.location.pathname }}
+    >
+      <BugReportForm />
+    </HandrailBugReporterProvider>
   );
 }
 ```
+
+Policy-derived automation controls are empty unless the current response is
+verified and allowlisted. Screenshot replacement always holds at most one
+attachment. When policy or identity is unavailable, `isVanilla` is true,
+automation selections are cleared, and the same `submit` action still sends a
+vanilla report. The provider installs no global event listeners and uses no
+cookies, local storage, session storage, analytics, or background persistence.
 
 Every stamped report includes authoritative values for:
 

@@ -1,0 +1,464 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import {
+  APPLICATION_SESSION_TOKEN_HEADER,
+  BugReporterError,
+  MAX_SCREENSHOT_BYTES,
+  createBugReporter,
+  normalizeBugReporterEndpoints,
+} from "@handrail/bug-reporter";
+
+const validPolicy = {
+  schema_version: 1,
+  project_id: "project-123",
+  environment: "staging",
+  reporter: {
+    identity_verified: true,
+    access_level: "full_access",
+  },
+  ask_options: [
+    { key: "auto_verify", label: "Server-controlled label" },
+    { key: "fix", label: "Fix this issue" },
+    { key: "future_unsafe_option", label: "Do everything" },
+  ],
+};
+
+function jsonResponse(body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+function reporterConfig(overrides = {}) {
+  return {
+    apiBaseUrl: "https://handrail.example/api",
+    projectId: "project-123",
+    environment: "staging",
+    reportToken: "public-report-token",
+    retry: { maxAttempts: 1, delayMs: 0 },
+    ...overrides,
+  };
+}
+
+test("normalizes Handrail origins, /api bases, relative paths, and full endpoints", () => {
+  const cases = [
+    [
+      "https://handrail.example",
+      "https://handrail.example/api/mobile-bug-reports",
+    ],
+    [
+      "https://handrail.example/",
+      "https://handrail.example/api/mobile-bug-reports",
+    ],
+    [
+      "https://handrail.example/api",
+      "https://handrail.example/api/mobile-bug-reports",
+    ],
+    [
+      "https://handrail.example/api/",
+      "https://handrail.example/api/mobile-bug-reports",
+    ],
+    ["/api", "/api/mobile-bug-reports"],
+    ["/api/", "/api/mobile-bug-reports"],
+    ["/api/mobile-bug-reports", "/api/mobile-bug-reports"],
+  ];
+
+  for (const [input, reports] of cases) {
+    assert.deepEqual(normalizeBugReporterEndpoints(input), {
+      reports,
+      policy: `${reports}/policy`,
+    });
+  }
+  assert.throws(
+    () => normalizeBugReporterEndpoints("https://user:secret@example.test/api"),
+    (error) =>
+      error instanceof BugReporterError &&
+      error.code === "invalid_configuration" &&
+      !error.message.includes("secret"),
+  );
+});
+
+test("disabled and misconfigured reporters never make requests", async () => {
+  let requestCount = 0;
+  let providerCount = 0;
+  const disabled = createBugReporter({
+    enabled: false,
+    reportToken: "snapshot-report-secret",
+    applicationSessionTokenProvider: () => {
+      providerCount += 1;
+      return "snapshot-session-secret";
+    },
+    fetch: async () => {
+      requestCount += 1;
+      return jsonResponse({ ok: true }, 201);
+    },
+  });
+
+  assert.equal(disabled.configuration.status, "disabled");
+  assert.equal(await disabled.discoverPolicy(), null);
+  assert.deepEqual(
+    await disabled.submit({ title: "Ignored", description: "Ignored" }),
+    { status: "disabled" },
+  );
+  assert.equal(requestCount, 0);
+  assert.equal(providerCount, 0);
+  const snapshot = JSON.stringify(disabled.configuration);
+  assert.doesNotMatch(snapshot, /snapshot-report-secret|snapshot-session-secret/);
+
+  const misconfigured = createBugReporter({
+    enabled: true,
+    apiBaseUrl: "not-a-url",
+    reportToken: "misconfigured-secret",
+    fetch: async () => {
+      requestCount += 1;
+      return jsonResponse({ ok: true }, 201);
+    },
+  });
+  assert.equal(misconfigured.configuration.status, "misconfigured");
+  assert.equal(await misconfigured.discoverPolicy(), null);
+  await assert.rejects(
+    misconfigured.submit({ title: "Issue", description: "Details" }),
+    (error) =>
+      error instanceof BugReporterError &&
+      error.code === "invalid_configuration" &&
+      !error.message.includes("misconfigured-secret"),
+  );
+  assert.equal(requestCount, 0);
+});
+
+test("policy lookup resolves a fresh session and accepts only verified allowlisted options", async () => {
+  const sessionTokens = ["policy-session-one", "policy-session-two"];
+  const requests = [];
+  const reporter = createBugReporter(
+    reporterConfig({
+      applicationSessionTokenProvider: () => sessionTokens.shift(),
+      fetch: async (url, init) => {
+        requests.push({ url, init });
+        return jsonResponse(validPolicy);
+      },
+    }),
+  );
+
+  const first = await reporter.loadPolicy();
+  const second = await reporter.discoverPolicy();
+  assert.equal(requests.length, 2);
+  assert.equal(
+    requests[0].url,
+    "https://handrail.example/api/mobile-bug-reports/policy?project_id=project-123&environment=staging",
+  );
+  assert.equal(
+    requests[0].init.headers[APPLICATION_SESSION_TOKEN_HEADER],
+    "policy-session-one",
+  );
+  assert.equal(
+    requests[1].init.headers[APPLICATION_SESSION_TOKEN_HEADER],
+    "policy-session-two",
+  );
+  assert.deepEqual(first.askOptions, [
+    { key: "auto_verify", label: "Verify this issue" },
+    { key: "fix", label: "Fix this issue" },
+  ]);
+  assert.deepEqual(second, first);
+  assert.ok(Object.isFrozen(second));
+  assert.ok(Object.isFrozen(second.askOptions));
+  assert.doesNotMatch(JSON.stringify(second), /policy-session/);
+});
+
+test("unverified, mismatched, failed, and malformed policies fall back to vanilla", async () => {
+  const responses = [
+    jsonResponse({
+      ...validPolicy,
+      reporter: { identity_verified: false, access_level: "default" },
+    }),
+    jsonResponse({ ...validPolicy, project_id: "wrong-project" }),
+    jsonResponse({ error: "unavailable" }, 503),
+    new Response("not json", { status: 200 }),
+  ];
+  const reporter = createBugReporter(
+    reporterConfig({ fetch: async () => responses.shift() }),
+  );
+
+  for (let index = 0; index < 4; index += 1) {
+    assert.equal(await reporter.discoverPolicy(), null);
+    assert.equal(reporter.currentPolicy, null);
+  }
+});
+
+test("submission retries idempotently with fresh session headers and filtered automation", async () => {
+  const sessionTokens = [
+    "policy-session",
+    "submission-session-one",
+    "submission-session-two",
+  ];
+  const requests = [];
+  const reporter = createBugReporter(
+    reporterConfig({
+      retry: { maxAttempts: 2, delayMs: 0 },
+      applicationSessionTokenProvider: () => sessionTokens.shift(),
+      fetch: async (url, init) => {
+        requests.push({ url, init });
+        if (init.method === "GET") return jsonResponse(validPolicy);
+        const submissionNumber = requests.filter(
+          (request) => request.init.method === "POST",
+        ).length;
+        return submissionNumber === 1
+          ? jsonResponse({ error: "temporary" }, 503)
+          : jsonResponse({ bug_id: "bug-123" }, 201);
+      },
+    }),
+  );
+
+  await reporter.discoverPolicy();
+  const result = await reporter.submit(
+    {
+      title: "Checkout failure",
+      description: "Continue does not work.",
+      route: "/checkout",
+      appVersion: "1.2.3",
+      buildNumber: "42",
+      commitSha: "abc123",
+    },
+    {
+      automationRequests: [
+        "fix",
+        "deploy_production",
+        "future_unsafe_option",
+      ],
+    },
+  );
+
+  assert.deepEqual(result, {
+    status: "submitted",
+    statusCode: 201,
+    response: { bug_id: "bug-123" },
+  });
+  const submissions = requests.filter(
+    (request) => request.init.method === "POST",
+  );
+  assert.equal(submissions.length, 2);
+  assert.equal(
+    submissions[0].init.headers[APPLICATION_SESSION_TOKEN_HEADER],
+    "submission-session-one",
+  );
+  assert.equal(
+    submissions[1].init.headers[APPLICATION_SESSION_TOKEN_HEADER],
+    "submission-session-two",
+  );
+  const firstBody = JSON.parse(submissions[0].init.body);
+  const secondBody = JSON.parse(submissions[1].init.body);
+  assert.deepEqual(firstBody.automation_requests, { fix: true });
+  assert.equal(secondBody.event_id, firstBody.event_id);
+  assert.match(firstBody.event_id, /^js-/);
+  assert.equal(firstBody.project_id, "project-123");
+  assert.equal(firstBody.environment, "staging");
+  assert.equal(firstBody.source, "node_web_bug_reporter");
+  assert.equal(firstBody.platform, "browser");
+  assert.equal(firstBody.reporter_sdk_runtime, "browser");
+  assert.equal(firstBody.reporter_sdk_package, "@handrail/bug-reporter");
+  assert.equal(typeof firstBody.reporter_sdk_version, "string");
+  assert.equal(typeof firstBody.reporter_sdk_commit, "string");
+  assert.equal(typeof firstBody.reporter_sdk_ref, "string");
+  assert.doesNotMatch(
+    JSON.stringify(submissions),
+    /policy-session(?!-one|-two)/,
+  );
+  assert.doesNotMatch(
+    submissions.map((request) => request.init.body).join("\n"),
+    /submission-session/,
+  );
+});
+
+test("submission without a current session degrades to vanilla automation", async () => {
+  const bodies = [];
+  let providerCall = 0;
+  const reporter = createBugReporter(
+    reporterConfig({
+      applicationSessionTokenProvider: () => {
+        if (providerCall++ === 0) return "verified-policy-session";
+        throw new Error("application auth is temporarily unavailable");
+      },
+      fetch: async (_url, init) => {
+        if (init.method === "GET") return jsonResponse(validPolicy);
+        bodies.push(JSON.parse(init.body));
+        return jsonResponse({ bug_id: "bug-vanilla" }, 201);
+      },
+    }),
+  );
+  assert.ok(await reporter.discoverPolicy());
+  await reporter.submit(
+    { title: "Vanilla issue", description: "Still report this issue." },
+    { automationRequests: ["fix"] },
+  );
+  assert.equal(bodies.length, 1);
+  assert.equal(bodies[0].automation_requests, undefined);
+});
+
+test("built-in and caller redaction hooks sanitize nested metadata", async () => {
+  let request;
+  const reporter = createBugReporter(
+    reporterConfig({
+      applicationSessionTokenProvider: () => "header-only-session-token",
+      redactionHooks: [
+        (report) => ({
+          ...report,
+          description: String(report.description).replace(
+            "alice@example.test",
+            "[email removed]",
+          ),
+          metadata: {
+            ...report.metadata,
+            custom_private_value: "[custom removed]",
+          },
+          automation_requests: { deploy_production: true },
+          screenshot_base64: "hook-bypass-attempt",
+          reporter_assertion: { verifier: "hook-session-bypass" },
+        }),
+      ],
+      fetch: async (_url, init) => {
+        request = init;
+        return jsonResponse({ bug_id: "redacted" }, 201);
+      },
+    }),
+  );
+
+  await reporter.submit({
+    title: "Redaction check",
+    description: "Reported by alice@example.test",
+    metadata: {
+      authorization: "Bearer nested-secret",
+      nested: {
+        refreshToken: "refresh-secret",
+        apiKey: "api-key-secret",
+        safe: "visible",
+      },
+      password: "password-secret",
+    },
+  });
+  const body = JSON.parse(request.body);
+  assert.equal(body.description, "Reported by [email removed]");
+  assert.equal(body.metadata.authorization, "[REDACTED]");
+  assert.equal(body.metadata.password, "[REDACTED]");
+  assert.equal(body.metadata.nested.refreshToken, "[REDACTED]");
+  assert.equal(body.metadata.nested.apiKey, "[REDACTED]");
+  assert.equal(body.metadata.nested.safe, "visible");
+  assert.equal(body.metadata.custom_private_value, "[custom removed]");
+  assert.equal(body.automation_requests, undefined);
+  assert.equal(body.screenshot_base64, undefined);
+  assert.equal(body.reporter_assertion, undefined);
+  assert.equal(
+    request.headers[APPLICATION_SESSION_TOKEN_HEADER],
+    "header-only-session-token",
+  );
+  assert.doesNotMatch(
+    request.body,
+    /header-only-session-token|nested-secret|refresh-secret|api-key-secret|password-secret|hook-session-bypass|hook-bypass-attempt/,
+  );
+});
+
+test("screenshots are opt-in, signature checked, MIME bounded, and limited to 20 MiB", async () => {
+  const pngBytes = new Uint8Array([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00,
+  ]);
+  let body;
+  const enabled = createBugReporter(
+    reporterConfig({
+      allowScreenshots: true,
+      fetch: async (_url, init) => {
+        body = JSON.parse(init.body);
+        return jsonResponse({ bug_id: "with-image" }, 201);
+      },
+    }),
+  );
+  await enabled.submit({
+    title: "Image issue",
+    description: "See screenshot.",
+    screenshot: {
+      data: pngBytes,
+      mimeType: "image/png",
+      filename: "../unsafe/name.png",
+    },
+  });
+  assert.equal(body.screenshot_mime_type, "image/png");
+  assert.equal(body.screenshot_filename, ".._unsafe_name.png");
+  assert.equal(body.screenshot_base64, "iVBORw0KGgoA");
+
+  const disabled = createBugReporter(
+    reporterConfig({ fetch: async () => jsonResponse({}, 201) }),
+  );
+  await assert.rejects(
+    disabled.submit({
+      title: "Image issue",
+      description: "See screenshot.",
+      screenshot: { data: pngBytes, mimeType: "image/png" },
+    }),
+    (error) =>
+      error instanceof BugReporterError && error.code === "invalid_screenshot",
+  );
+
+  await assert.rejects(
+    enabled.submit({
+      title: "Wrong image",
+      description: "This is not a supported image.",
+      screenshot: {
+        data: "R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==",
+        mimeType: "image/png",
+      },
+    }),
+    (error) =>
+      error instanceof BugReporterError && error.code === "invalid_screenshot",
+  );
+
+  const oversized = new Uint8Array(MAX_SCREENSHOT_BYTES + 1);
+  oversized.set(pngBytes);
+  await assert.rejects(
+    enabled.submit({
+      title: "Large image",
+      description: "This image is too large.",
+      screenshot: { data: oversized, mimeType: "image/png" },
+    }),
+    (error) =>
+      error instanceof BugReporterError &&
+      error.code === "invalid_screenshot" &&
+      !error.message.includes(String(MAX_SCREENSHOT_BYTES + 1)),
+  );
+});
+
+test("network and HTTP errors expose only safe messages", async () => {
+  const secret = "fresh-session-value-that-must-not-escape";
+  const networkReporter = createBugReporter(
+    reporterConfig({
+      applicationSessionTokenProvider: () => secret,
+      fetch: async () => {
+        throw new Error(`transport failed with ${secret}`);
+      },
+    }),
+  );
+  await assert.rejects(
+    networkReporter.submit({ title: "Issue", description: "Details" }),
+    (error) =>
+      error instanceof BugReporterError &&
+      error.code === "request_failed" &&
+      !error.message.includes(secret) &&
+      !(error.stack || "").includes(secret),
+  );
+
+  const httpReporter = createBugReporter(
+    reporterConfig({
+      fetch: async () =>
+        new Response(`server echoed public-report-token and ${secret}`, {
+          status: 401,
+        }),
+    }),
+  );
+  await assert.rejects(
+    httpReporter.submit({ title: "Issue", description: "Details" }),
+    (error) =>
+      error instanceof BugReporterError &&
+      error.code === "submission_rejected" &&
+      error.statusCode === 401 &&
+      !error.message.includes("public-report-token") &&
+      !error.message.includes(secret),
+  );
+});
