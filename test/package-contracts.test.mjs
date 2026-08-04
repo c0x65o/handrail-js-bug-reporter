@@ -27,18 +27,16 @@ const entryPoints = [
   ["@handrail/bug-reporter/react", "react", "browser"],
 ];
 
-test("release manifests and README agree on the valid release candidate", () => {
+test("release manifests and README use the ordinary stable version contract", () => {
   assert.doesNotThrow(() => assertReleaseManifests(packageJson, packageLock));
-  assert.equal(packageJson.version, "0.1.0-rc.2");
+  assert.match(packageJson.version, /^\d+\.\d+\.\d+$/u);
   assert.equal(
     packageJson.scripts.prepare,
     "npm run build",
     "Git dependencies must build dist before npm packs the checkout",
   );
-  assert.match(
-    readme,
-    new RegExp(`@handrail/bug-reporter@${packageJson.version.replaceAll(".", "\\.")}`),
-  );
+  assert.match(readme, /exact Git commit approved by Handrail/u);
+  assert.doesNotMatch(readme, /release candidate|\brc\.\d+\b/iu);
   assert.doesNotMatch(readme, /0\.1\.NaN/);
 });
 

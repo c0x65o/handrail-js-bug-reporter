@@ -4,25 +4,20 @@ Framework-neutral JavaScript bug-reporting primitives for Handrail. The package
 has separate browser, Node/server, and headless React entry points and stamps
 reports with immutable SDK release identity.
 
-This repository currently builds the `0.1.0-rc.2` release candidate. It is not
-published yet.
-
 ## Installation
 
-After the release candidate is published, install the exact version:
+The package is not currently published to the public npm registry. Applications
+should use the exact Git commit approved by Handrail's JavaScript bug reporter
+install contract, never a moving branch such as `main`.
 
-```sh
-npm install @handrail/bug-reporter@0.1.0-rc.2
-```
-
-For local evaluation before publication, build and pack this checkout, then
-install the resulting tarball in a test application:
+For local evaluation, build and pack this checkout, then install the resulting
+tarball in a test application:
 
 ```sh
 npm ci
 npm run build
 npm pack
-npm install /path/to/handrail-bug-reporter-0.1.0-rc.2.tgz
+npm install ./handrail-bug-reporter-*.tgz
 ```
 
 React applications must already provide React 18 or newer. React is a peer
@@ -301,16 +296,9 @@ generates a source module containing literal release values and bundles those
 literals into every runtime entry point. Runtime modules never inspect
 `package.json`, Git, environment variables, `process`, or the filesystem.
 
-For local builds, the commit is read from the current Git checkout. The release
-ref is an exact Git tag when one exists; otherwise it is the immutable
-`commit:<sha>` value. Release automation should provide and verify the intended
-commit and immutable tag explicitly:
-
-```sh
-HANDRAIL_BUG_REPORTER_SDK_COMMIT="$(git rev-parse HEAD)" \
-HANDRAIL_BUG_REPORTER_SDK_REF="refs/tags/v0.1.0-rc.2" \
-npm run build
-```
+For builds in a Git checkout, the commit is read automatically. The release ref
+is an exact version tag when one exists; otherwise it is the immutable
+`commit:<sha>` value. No release-candidate or alternate version flow is used.
 
 The release ref must be an immutable tag or commit reference, never a moving
 branch such as `main`. `npm run check` verifies package and lockfile version
