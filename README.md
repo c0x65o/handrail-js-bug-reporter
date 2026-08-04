@@ -6,9 +6,10 @@ reports with immutable SDK release identity.
 
 ## Installation
 
-The package is not currently published to the public npm registry. Applications
-should use the exact Git commit approved by Handrail's JavaScript bug reporter
-install contract, never a moving branch such as `main`.
+This public SDK is distributed from its GitHub repository in the same exact-pin
+model as Handrail's other SDKs. Applications should use the Git commit approved
+by Handrail's JavaScript bug reporter install contract, never a moving branch
+such as `main`.
 
 For local evaluation, build and pack this checkout, then install the resulting
 tarball in a test application:
@@ -296,9 +297,10 @@ generates a source module containing literal release values and bundles those
 literals into every runtime entry point. Runtime modules never inspect
 `package.json`, Git, environment variables, `process`, or the filesystem.
 
-For builds in a Git checkout, the commit is read automatically. The release ref
-is an exact version tag when one exists; otherwise it is the immutable
-`commit:<sha>` value. No release-candidate or alternate version flow is used.
+For builds in a Git checkout, the commit is read automatically. Public Git
+installs can build without `.git`; in that case the SDK stamps its stable version
+tag while the consuming application's lockfile owns the exact commit. No
+release-candidate or alternate version flow is used.
 
 The release ref must be an immutable tag or commit reference, never a moving
 branch such as `main`. `npm run check` verifies package and lockfile version

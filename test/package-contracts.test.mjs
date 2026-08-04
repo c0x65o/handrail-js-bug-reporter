@@ -8,6 +8,7 @@ import { build } from "esbuild";
 import {
   assertReleaseIdentity,
   assertReleaseManifests,
+  resolveReleaseCommit,
   resolveReleaseRef,
 } from "../scripts/release-contract.mjs";
 
@@ -35,7 +36,7 @@ test("release manifests and README use the ordinary stable version contract", ()
     "npm run build",
     "Git dependencies must build dist before npm packs the checkout",
   );
-  assert.match(readme, /exact Git commit approved by Handrail/u);
+  assert.match(readme, /Git commit approved\s+by Handrail/u);
   assert.doesNotMatch(readme, /release candidate|\brc\.\d+\b/iu);
   assert.doesNotMatch(readme, /0\.1\.NaN/);
 });
@@ -94,6 +95,41 @@ test("release contracts reject malformed and inconsistent metadata", () => {
       version: packageJson.version,
     }),
     `commit:${"a".repeat(40)}`,
+  );
+});
+
+test("release commit resolves from npm's exact public Git source", () => {
+  const commit = "a".repeat(40);
+  assert.equal(
+    resolveReleaseCommit(
+      undefined,
+      `git+https://github.com/c0x65o/handrail-js-bug-reporter.git#${commit}`,
+    ),
+    commit,
+  );
+  assert.equal(
+    resolveReleaseCommit(`github:c0x65o/handrail-js-bug-reporter#${commit}`),
+    commit,
+  );
+  assert.equal(resolveReleaseCommit("/tmp/npm-git-checkout"), undefined);
+
+  const versionRef = resolveReleaseRef({
+    commit: undefined,
+    exactTag: undefined,
+    explicitRef: undefined,
+    version: packageJson.version,
+  });
+  assert.equal(versionRef, `refs/tags/v${packageJson.version}`);
+  assert.doesNotThrow(() =>
+    assertReleaseIdentity(
+      {
+        commit: "",
+        packageName: packageJson.name,
+        packageVersion: packageJson.version,
+        releaseRef: versionRef,
+      },
+      packageJson,
+    ),
   );
 });
 

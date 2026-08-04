@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import {
   assertReleaseIdentity,
   assertReleaseManifests,
+  resolveReleaseCommit,
   resolveReleaseRef,
 } from "./release-contract.mjs";
 
@@ -36,10 +37,15 @@ function git(...args) {
   }
 }
 
-const commit =
-  clean(process.env.HANDRAIL_BUG_REPORTER_SDK_COMMIT) ??
-  git("rev-parse", "HEAD");
-const exactTag = git("describe", "--exact-match", "--tags", commit);
+const commit = resolveReleaseCommit(
+  clean(process.env.HANDRAIL_BUG_REPORTER_SDK_COMMIT),
+  git("rev-parse", "HEAD"),
+  clean(process.env.npm_package_resolved),
+  clean(process.env.npm_package_from),
+) ?? "";
+const exactTag = commit
+  ? git("describe", "--exact-match", "--tags", commit)
+  : undefined;
 const releaseRef = resolveReleaseRef({
   commit,
   exactTag,

@@ -3,6 +3,20 @@ const SEMVER_PATTERN =
 
 const FULL_COMMIT_PATTERN = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i;
 
+export function resolveReleaseCommit(...candidates) {
+  for (const candidate of candidates) {
+    const value = typeof candidate === "string" ? candidate.trim() : "";
+    if (!value) continue;
+    if (FULL_COMMIT_PATTERN.test(value)) return value.toLowerCase();
+
+    const match = value.match(
+      /(?:#|commit:)((?:[0-9a-f]{40}|[0-9a-f]{64}))(?:$|[?&])/iu,
+    );
+    if (match) return match[1].toLowerCase();
+  }
+  return undefined;
+}
+
 export function assertReleaseManifests(packageJson, packageLock) {
   if (!packageJson || typeof packageJson.name !== "string" || !packageJson.name) {
     throw new Error("package.json must contain a package name.");
@@ -33,14 +47,15 @@ export function resolveReleaseRef({ commit, exactTag, explicitRef, version }) {
   return (
     explicitRef ??
     (exactTag === `v${version}` ? `refs/tags/${exactTag}` : undefined) ??
-    `commit:${commit}`
+    (FULL_COMMIT_PATTERN.test(commit) ? `commit:${commit}` : undefined) ??
+    `refs/tags/v${version}`
   );
 }
 
 export function assertReleaseIdentity(identity, packageJson) {
-  if (!FULL_COMMIT_PATTERN.test(identity.commit)) {
+  if (identity.commit && !FULL_COMMIT_PATTERN.test(identity.commit)) {
     throw new Error(
-      "A full Git commit is required. Set HANDRAIL_BUG_REPORTER_SDK_COMMIT when building outside a Git checkout.",
+      "Generated release commit must be a full Git commit when present.",
     );
   }
   if (
@@ -58,8 +73,10 @@ export function assertReleaseIdentity(identity, packageJson) {
   const commitRef = identity.releaseRef.match(/^commit:(.+)$/i);
   const rawCommitRef = FULL_COMMIT_PATTERN.test(identity.releaseRef);
   const consistentCommitRef =
-    commitRef?.[1]?.toLowerCase() === identity.commit.toLowerCase() ||
-    (rawCommitRef && identity.releaseRef.toLowerCase() === identity.commit.toLowerCase());
+    Boolean(identity.commit) && (
+      commitRef?.[1]?.toLowerCase() === identity.commit.toLowerCase() ||
+      (rawCommitRef && identity.releaseRef.toLowerCase() === identity.commit.toLowerCase())
+    );
 
   if (!consistentCommitRef && !canonicalTags.has(identity.releaseRef)) {
     throw new Error(
