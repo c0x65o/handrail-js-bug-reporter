@@ -146,9 +146,14 @@ Retries are opt-in through `retry.maxAttempts` (maximum 3). The SDK retries
 network failures and transient HTTP statuses, re-resolves the application
 session for every attempt, and reuses an intake `event_id` so a response-loss
 retry remains idempotent. Retry bodies never contain the application session.
-Error messages do not include provider exceptions, response bodies, request
-data, tokens, or screenshots; callers may use the safe `code` and optional
-HTTP `statusCode` fields on `BugReporterError`.
+The primary `BugReporterError.message` remains generic and never includes
+provider exceptions, response bodies, request data, tokens, or screenshots.
+For a rejected HTTP submission, callers may also use `statusCode`,
+`upstreamCode`, `upstreamMessage`, and `requestId`. The upstream message is a
+bounded Handrail diagnostic with the report token and current application
+session token redacted; it is intended for server-side logging or deliberate
+application error mapping rather than automatic rendering. Non-JSON and
+malformed response bodies are discarded.
 
 Server code uses the isolated server entry point:
 

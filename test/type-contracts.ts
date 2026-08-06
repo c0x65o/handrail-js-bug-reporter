@@ -1,5 +1,6 @@
 import {
   SDK_IDENTITY as browserIdentity,
+  BugReporterError,
   createBugReporter,
   stampReport as stampBrowserReport,
   type BugReporterPolicy,
@@ -97,6 +98,23 @@ const submissionPromise = reporter.submit(
 );
 void policyPromise;
 void submissionPromise;
+
+const rejection = new BugReporterError(
+  "submission_rejected",
+  "The bug report was not accepted.",
+  403,
+  {
+    code: "reporter_policy_rejected",
+    message: "The reporter policy rejected this request.",
+    requestId: "request-123",
+  },
+);
+const upstreamCode: string | null = rejection.upstreamCode;
+const upstreamMessage: string | null = rejection.upstreamMessage;
+const requestId: string | null = rejection.requestId;
+void upstreamCode;
+void upstreamMessage;
+void requestId;
 
 const sameOriginReporter = createBugReporter({
   apiBaseUrl: "/api",

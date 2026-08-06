@@ -458,7 +458,88 @@ test("network and HTTP errors expose only safe messages", async () => {
       error instanceof BugReporterError &&
       error.code === "submission_rejected" &&
       error.statusCode === 401 &&
+      error.upstreamCode === null &&
+      error.upstreamMessage === null &&
+      error.requestId === null &&
       !error.message.includes("public-report-token") &&
       !error.message.includes(secret),
+  );
+});
+
+test("HTTP rejections preserve structured Handrail diagnostics with credentials redacted", async () => {
+  const sessionSecret = "current-application-session-secret";
+  const reporter = createBugReporter(
+    reporterConfig({
+      applicationSessionTokenProvider: () => sessionSecret,
+      fetch: async () =>
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "bug_report_intake_rejected",
+              message:
+                `Intake rejected public-report-token and ${sessionSecret}.`,
+              requestId: "body-request-id",
+            },
+          }),
+          {
+            status: 422,
+            headers: {
+              "content-type": "application/json",
+              "x-request-id": "header-request-id",
+            },
+          },
+        ),
+    }),
+  );
+
+  await assert.rejects(
+    reporter.submit({ title: "Issue", description: "Details" }),
+    (error) => {
+      assert.equal(error instanceof BugReporterError, true);
+      assert.equal(error.code, "submission_rejected");
+      assert.equal(error.statusCode, 422);
+      assert.equal(error.upstreamCode, "bug_report_intake_rejected");
+      assert.equal(
+        error.upstreamMessage,
+        "Intake rejected [REDACTED] and [REDACTED].",
+      );
+      assert.equal(error.requestId, "header-request-id");
+      assert.equal(error.message, "The bug report was not accepted.");
+      assert.doesNotMatch(
+        `${error.message}\n${error.stack || ""}\n${JSON.stringify(error)}`,
+        /public-report-token|current-application-session-secret/,
+      );
+      return true;
+    },
+  );
+});
+
+test("HTTP rejections accept Handrail's current string error shape", async () => {
+  const reporter = createBugReporter(
+    reporterConfig({
+      fetch: async () =>
+        new Response(
+          JSON.stringify({
+            error: "production report intake requires a valid policy",
+            request_id: "body-correlation-id",
+          }),
+          {
+            status: 403,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+    }),
+  );
+
+  await assert.rejects(
+    reporter.submit({ title: "Issue", description: "Details" }),
+    (error) =>
+      error instanceof BugReporterError &&
+      error.code === "submission_rejected" &&
+      error.statusCode === 403 &&
+      error.upstreamCode === null &&
+      error.upstreamMessage ===
+        "production report intake requires a valid policy" &&
+      error.requestId === "body-correlation-id",
   );
 });

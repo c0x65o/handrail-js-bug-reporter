@@ -40,6 +40,7 @@ export type {
   BugReporterConfigurationStatus,
   BugReporterEndpoints,
   BugReporterErrorCode,
+  BugReporterUpstreamError,
   BugReporterPolicy,
   BugReportSubmissionResult,
   BugReporterTransport,

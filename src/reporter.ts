@@ -153,20 +153,40 @@ export type BugReporterErrorCode =
   | "request_failed"
   | "submission_rejected";
 
-/** Error messages are intentionally generic and never include request data. */
+export interface BugReporterUpstreamError {
+  /** Stable error code returned by Handrail, when one is available. */
+  readonly code: string | null;
+  /** Bounded Handrail diagnostic with request credentials redacted. */
+  readonly message: string | null;
+  /** Correlation ID returned by Handrail or its HTTP boundary. */
+  readonly requestId: string | null;
+}
+
+/**
+ * Error messages are intentionally generic and never include request data.
+ * Rejected submissions may also expose bounded, credential-redacted Handrail
+ * diagnostics through the upstream fields for server-side logging and mapping.
+ */
 export class BugReporterError extends Error {
   readonly code: BugReporterErrorCode;
   readonly statusCode: number | null;
+  readonly upstreamCode: string | null;
+  readonly upstreamMessage: string | null;
+  readonly requestId: string | null;
 
   constructor(
     code: BugReporterErrorCode,
     message: string,
     statusCode: number | null = null,
+    upstream: BugReporterUpstreamError | null = null,
   ) {
     super(message);
     this.name = "BugReporterError";
     this.code = code;
     this.statusCode = statusCode;
+    this.upstreamCode = upstream?.code ?? null;
+    this.upstreamMessage = upstream?.message ?? null;
+    this.requestId = upstream?.requestId ?? null;
   }
 }
 
@@ -181,6 +201,11 @@ interface NormalizedScreenshot {
   readonly base64: string;
   readonly filename: string;
   readonly mimeType: "image/png" | "image/jpeg";
+}
+
+interface ReporterRequestResult {
+  readonly response: Response | null;
+  readonly sensitiveValues: readonly string[];
 }
 
 const AUTOMATION_OPTION_BY_KEY = new Map<AutomationOptionKey, AutomationOption>(
@@ -205,11 +230,85 @@ const CALLER_REPORT_FIELDS = Object.freeze([
   "metadata",
 ] as const);
 const OMIT = Symbol("omit");
+const MAX_UPSTREAM_ERROR_BODY_CHARACTERS = 16_384;
+const MAX_UPSTREAM_ERROR_MESSAGE_CHARACTERS = 500;
+const MAX_UPSTREAM_ERROR_CODE_CHARACTERS = 120;
+const MAX_REQUEST_ID_CHARACTERS = 200;
 
 function cleanString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const cleaned = value.trim();
   return cleaned || null;
+}
+
+function boundedDiagnosticString(value: unknown, maximum: number): string | null {
+  const cleaned = cleanString(value)?.replace(/[\u0000-\u001f\u007f]+/g, " ");
+  return cleaned ? cleaned.slice(0, maximum) : null;
+}
+
+function redactDiagnosticSecrets(
+  value: string | null,
+  sensitiveValues: readonly string[],
+): string | null {
+  if (!value) return null;
+  let redacted = value;
+  for (const sensitiveValue of sensitiveValues) {
+    if (sensitiveValue) redacted = redacted.replaceAll(sensitiveValue, REDACTED_VALUE);
+  }
+  redacted = redacted.replace(/\bhbr_[A-Za-z0-9_-]+\b/g, REDACTED_VALUE);
+  return redacted;
+}
+
+function safeUpstreamCode(value: unknown): string | null {
+  const code = boundedDiagnosticString(value, MAX_UPSTREAM_ERROR_CODE_CHARACTERS);
+  return code && /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(code) ? code : null;
+}
+
+function safeRequestId(value: unknown): string | null {
+  const requestId = boundedDiagnosticString(value, MAX_REQUEST_ID_CHARACTERS);
+  return requestId && /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(requestId)
+    ? requestId
+    : null;
+}
+
+async function parseUpstreamError(
+  response: Response,
+  sensitiveValues: readonly string[],
+): Promise<BugReporterUpstreamError> {
+  const headerRequestId =
+    safeRequestId(response.headers.get("x-request-id")) ||
+    safeRequestId(response.headers.get("x-handrail-request-id"));
+  let body: Record<string, unknown> | null = null;
+  try {
+    const text = await response.text();
+    if (text.length <= MAX_UPSTREAM_ERROR_BODY_CHARACTERS) {
+      const parsed: unknown = JSON.parse(text);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        body = parsed as Record<string, unknown>;
+      }
+    }
+  } catch {
+    body = null;
+  }
+
+  const errorValue = body?.error;
+  const errorRecord =
+    errorValue && typeof errorValue === "object" && !Array.isArray(errorValue)
+      ? (errorValue as Record<string, unknown>)
+      : null;
+  const code = safeUpstreamCode(errorRecord?.code ?? body?.code);
+  const rawMessage =
+    errorRecord?.message ??
+    (typeof errorValue === "string" ? errorValue : body?.message);
+  const message = redactDiagnosticSecrets(
+    boundedDiagnosticString(rawMessage, MAX_UPSTREAM_ERROR_MESSAGE_CHARACTERS),
+    sensitiveValues,
+  );
+  const requestId =
+    headerRequestId ||
+    safeRequestId(errorRecord?.requestId ?? errorRecord?.request_id) ||
+    safeRequestId(body?.requestId ?? body?.request_id);
+  return Object.freeze({ code, message, requestId });
 }
 
 function endpointPath(pathname: string): string {
@@ -641,10 +740,11 @@ export class HandrailBugReporterClient {
       ? `${endpoint.pathname}${endpoint.search}`
       : endpoint.toString();
 
-    const response = await this.requestWithRetries(policyUrl, {
+    const request = await this.requestWithRetries(policyUrl, {
       method: "GET",
       signal,
     });
+    const response = request.response;
     if (!response?.ok) return null;
     let body: unknown;
     try {
@@ -683,12 +783,13 @@ export class HandrailBugReporterClient {
     const automationBody = allowedAutomation
       ? JSON.stringify({ ...payload, automation_requests: allowedAutomation })
       : null;
-    const response = await this.requestWithRetries(this.endpoints!.reports, {
+    const request = await this.requestWithRetries(this.endpoints!.reports, {
       method: "POST",
       signal: options.signal,
       vanillaBody,
       automationBody,
     });
+    const response = request.response;
     if (!response) {
       throw new BugReporterError(
         "request_failed",
@@ -696,10 +797,15 @@ export class HandrailBugReporterClient {
       );
     }
     if (!response.ok) {
+      const upstream = await parseUpstreamError(
+        response,
+        request.sensitiveValues,
+      );
       throw new BugReporterError(
         "submission_rejected",
         "The bug report was not accepted.",
         response.status,
+        upstream,
       );
     }
     let responseBody: JsonValue | null = null;
@@ -863,13 +969,20 @@ export class HandrailBugReporterClient {
       readonly vanillaBody?: string;
       readonly automationBody?: string | null;
     },
-  ): Promise<Response | null> {
+  ): Promise<ReporterRequestResult> {
     let lastResponse: Response | null = null;
+    let lastSensitiveValues: readonly string[] = [];
     for (let attempt = 0; attempt < this.maxAttempts; attempt += 1) {
       if (attempt > 0) {
         await sleep(this.retryDelayMs * 2 ** (attempt - 1));
       }
       const applicationSessionToken = await this.freshSessionToken();
+      lastSensitiveValues = [
+        ...(this.transport === "direct" && this.reportToken
+          ? [this.reportToken]
+          : []),
+        ...(applicationSessionToken ? [applicationSessionToken] : []),
+      ];
       const headers: Record<string, string> = {
         accept: "application/json",
       };
@@ -907,11 +1020,19 @@ export class HandrailBugReporterClient {
         (!TRANSIENT_STATUS_CODES.has(lastResponse.status) ||
           attempt === this.maxAttempts - 1)
       ) {
-        return lastResponse;
+        return Object.freeze({
+          response: lastResponse,
+          sensitiveValues: lastSensitiveValues,
+        });
       }
-      if (!lastResponse && attempt === this.maxAttempts - 1) return null;
+      if (!lastResponse && attempt === this.maxAttempts - 1) {
+        return Object.freeze({ response: null, sensitiveValues: [] });
+      }
     }
-    return lastResponse;
+    return Object.freeze({
+      response: lastResponse,
+      sensitiveValues: lastSensitiveValues,
+    });
   }
 }
 
