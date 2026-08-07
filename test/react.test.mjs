@@ -171,3 +171,36 @@ test("headless React remains operational without policy or application identity"
   );
   await act(async () => renderer.unmount());
 });
+
+test("headless React leaves loading state when optional-action discovery stalls", async () => {
+  const config = {
+    apiBaseUrl: "https://handrail.example/api",
+    projectId: "project-123",
+    environment: "staging",
+    reportToken: "public-token",
+    policyDiscoveryTimeoutMs: 20,
+    fetch: async () => new Promise(() => {}),
+  };
+  let value;
+  let renderer;
+  await act(async () => {
+    renderer = create(
+      createElement(Harness, {
+        config,
+        onValue: (next) => {
+          value = next;
+        },
+      }),
+    );
+  });
+  assert.equal(value.policyStatus, "loading");
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 40));
+  });
+
+  assert.equal(value.policy, null);
+  assert.equal(value.policyStatus, "unavailable");
+  assert.equal(value.isVanilla, true);
+  assert.deepEqual(value.automationOptions, []);
+  await act(async () => renderer.unmount());
+});

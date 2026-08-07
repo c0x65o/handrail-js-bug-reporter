@@ -110,6 +110,11 @@ export interface BugReporterConfig {
   readonly allowScreenshots?: boolean;
   readonly redactionHooks?: readonly RedactionHook[];
   readonly retry?: ReporterRetryOptions;
+  /**
+   * Maximum time to wait for best-effort optional-action policy discovery.
+   * Defaults to 5 seconds. Report submission is not subject to this deadline.
+   */
+  readonly policyDiscoveryTimeoutMs?: number;
   readonly fetch?: typeof fetch;
 }
 
@@ -130,6 +135,7 @@ export interface BugReporterConfigurationSnapshot {
   readonly allowScreenshots: boolean;
   readonly redactionHookCount: number;
   readonly maxAttempts: number;
+  readonly policyDiscoveryTimeoutMs: number;
 }
 
 export interface SubmissionOptions {
@@ -234,6 +240,9 @@ const MAX_UPSTREAM_ERROR_BODY_CHARACTERS = 16_384;
 const MAX_UPSTREAM_ERROR_MESSAGE_CHARACTERS = 500;
 const MAX_UPSTREAM_ERROR_CODE_CHARACTERS = 120;
 const MAX_REQUEST_ID_CHARACTERS = 200;
+const DEFAULT_POLICY_DISCOVERY_TIMEOUT_MS = 5_000;
+const MAX_POLICY_DISCOVERY_TIMEOUT_MS = 30_000;
+const POLICY_DISCOVERY_INTERRUPTED = Symbol("policy discovery interrupted");
 
 function cleanString(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -629,6 +638,12 @@ function normalizedDelay(value: unknown): number {
     : 250;
 }
 
+function normalizedPolicyDiscoveryTimeout(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.min(MAX_POLICY_DISCOVERY_TIMEOUT_MS, Math.max(1, Math.round(value)))
+    : DEFAULT_POLICY_DISCOVERY_TIMEOUT_MS;
+}
+
 function sleep(milliseconds: number): Promise<void> {
   return milliseconds <= 0
     ? Promise.resolve()
@@ -656,6 +671,7 @@ export class HandrailBugReporterClient {
   private readonly redactionHooks: readonly RedactionHook[];
   private readonly maxAttempts: number;
   private readonly retryDelayMs: number;
+  private readonly policyDiscoveryTimeoutMs: number;
   private readonly fetchImpl: typeof fetch | null;
   private readonly identityAdapter: ReporterIdentityAdapter;
   #policy: BugReporterPolicy | null = null;
@@ -676,6 +692,9 @@ export class HandrailBugReporterClient {
     this.redactionHooks = Object.freeze([...(config.redactionHooks || [])]);
     this.maxAttempts = normalizedAttempts(config.retry?.maxAttempts);
     this.retryDelayMs = normalizedDelay(config.retry?.delayMs);
+    this.policyDiscoveryTimeoutMs = normalizedPolicyDiscoveryTimeout(
+      config.policyDiscoveryTimeoutMs,
+    );
     const availableFetch = config.fetch || globalThis.fetch;
     this.fetchImpl =
       typeof availableFetch === "function" ? availableFetch.bind(globalThis) : null;
@@ -720,6 +739,7 @@ export class HandrailBugReporterClient {
       allowScreenshots: this.allowScreenshots,
       redactionHookCount: this.redactionHooks.length,
       maxAttempts: this.maxAttempts,
+      policyDiscoveryTimeoutMs: this.policyDiscoveryTimeoutMs,
     });
   }
 
@@ -740,21 +760,56 @@ export class HandrailBugReporterClient {
       ? `${endpoint.pathname}${endpoint.search}`
       : endpoint.toString();
 
-    const request = await this.requestWithRetries(policyUrl, {
-      method: "GET",
-      signal,
-    });
-    const response = request.response;
-    if (!response?.ok) return null;
-    let body: unknown;
+    const controller = new AbortController();
+    let resolveInterrupted!: (
+      value: typeof POLICY_DISCOVERY_INTERRUPTED,
+    ) => void;
+    const interrupted = new Promise<typeof POLICY_DISCOVERY_INTERRUPTED>(
+      (resolve) => {
+        resolveInterrupted = resolve;
+      },
+    );
+    let interruptionHandled = false;
+    const interrupt = () => {
+      if (interruptionHandled) return;
+      interruptionHandled = true;
+      controller.abort();
+      resolveInterrupted(POLICY_DISCOVERY_INTERRUPTED);
+    };
+    const timeout = globalThis.setTimeout(
+      interrupt,
+      this.policyDiscoveryTimeoutMs,
+    );
+    if (signal?.aborted) interrupt();
+    else signal?.addEventListener("abort", interrupt, { once: true });
+
+    const lookup = (async (): Promise<BugReporterPolicy | null> => {
+      const request = await this.requestWithRetries(policyUrl, {
+        method: "GET",
+        signal: controller.signal,
+      });
+      const response = request.response;
+      if (!response?.ok) return null;
+      let body: unknown;
+      try {
+        body = await response.json();
+      } catch {
+        return null;
+      }
+      return this.parsePolicy(body);
+    })();
+
     try {
-      body = await response.json();
+      const result = await Promise.race([lookup, interrupted]);
+      if (result === POLICY_DISCOVERY_INTERRUPTED) return null;
+      this.#policy = result;
+      return result;
     } catch {
       return null;
+    } finally {
+      globalThis.clearTimeout(timeout);
+      signal?.removeEventListener("abort", interrupt);
     }
-    const policy = this.parsePolicy(body);
-    this.#policy = policy;
-    return policy;
   }
 
   loadPolicy(signal?: AbortSignal): Promise<BugReporterPolicy | null> {

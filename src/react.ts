@@ -237,9 +237,14 @@ export function HandrailBugReporterProvider({
   const refreshPolicy = useCallback(async () => {
     setPolicy(null);
     setPolicyStatus("loading");
-    const nextPolicy = await reporter.discoverPolicy();
-    applyPolicy(nextPolicy);
-    return nextPolicy;
+    try {
+      const nextPolicy = await reporter.discoverPolicy();
+      applyPolicy(nextPolicy);
+      return nextPolicy;
+    } catch {
+      applyPolicy(null);
+      return null;
+    }
   }, [applyPolicy, reporter]);
 
   useEffect(() => {
@@ -251,13 +256,20 @@ export function HandrailBugReporterProvider({
         active = false;
       };
     }
+    const controller = new AbortController();
     setPolicy(null);
     setPolicyStatus("loading");
-    void reporter.discoverPolicy().then((nextPolicy) => {
-      if (active) applyPolicy(nextPolicy);
-    });
+    void reporter.discoverPolicy(controller.signal).then(
+      (nextPolicy) => {
+        if (active) applyPolicy(nextPolicy);
+      },
+      () => {
+        if (active) applyPolicy(null);
+      },
+    );
     return () => {
       active = false;
+      controller.abort();
     };
   }, [applyPolicy, loadPolicyOnMount, reporter]);
 

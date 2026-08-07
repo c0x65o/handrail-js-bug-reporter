@@ -108,6 +108,12 @@ keys and uses this fixed allowlist:
 - `deploy_staging`
 - `deploy_production`
 
+Policy discovery falls back to vanilla reporting after five seconds by
+default, so a stalled application-session resolver or policy endpoint cannot
+leave optional-action controls loading indefinitely. Override the bounded
+deadline with `policyDiscoveryTimeoutMs`; it applies only to policy discovery,
+not report submission.
+
 Submission intersects caller selections with the most recently verified
 policy response. When there is no verified current policy or no current
 session at submission time, it omits `automation_requests` and submits a

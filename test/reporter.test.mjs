@@ -186,6 +186,22 @@ test("unverified, mismatched, failed, and malformed policies fall back to vanill
   }
 });
 
+test("policy discovery has a bounded vanilla fallback when identity resolution stalls", async () => {
+  const reporter = createBugReporter(
+    reporterConfig({
+      policyDiscoveryTimeoutMs: 20,
+      applicationSessionTokenProvider: () => new Promise(() => {}),
+      fetch: async () => {
+        throw new Error("policy fetch should not start without identity");
+      },
+    }),
+  );
+
+  assert.equal(reporter.configuration.policyDiscoveryTimeoutMs, 20);
+  assert.equal(await reporter.discoverPolicy(), null);
+  assert.equal(reporter.currentPolicy, null);
+});
+
 test("submission retries idempotently with fresh session headers and filtered automation", async () => {
   const sessionTokens = [
     "policy-session",
