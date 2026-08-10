@@ -204,3 +204,65 @@ test("headless React leaves loading state when optional-action discovery stalls"
   assert.deepEqual(value.automationOptions, []);
   await act(async () => renderer.unmount());
 });
+
+test("a late mount lookup cannot overwrite a newer manual policy refresh", async () => {
+  const pendingResponses = [];
+  const config = {
+    apiBaseUrl: "https://handrail.example/api",
+    projectId: "project-123",
+    environment: "staging",
+    reportToken: "public-token",
+    fetch: async () =>
+      new Promise((resolve) => {
+        pendingResponses.push(resolve);
+      }),
+  };
+  let value;
+  let renderer;
+  await act(async () => {
+    renderer = create(
+      createElement(Harness, {
+        config,
+        onValue: (next) => {
+          value = next;
+        },
+      }),
+    );
+  });
+  assert.equal(pendingResponses.length, 1);
+
+  let refresh;
+  await act(async () => {
+    refresh = value.refreshPolicy();
+    await new Promise((resolve) => setImmediate(resolve));
+  });
+  assert.equal(pendingResponses.length, 2);
+
+  await act(async () => {
+    pendingResponses[1](jsonResponse(policy));
+    await refresh;
+  });
+  assert.equal(value.policyStatus, "ready");
+  assert.deepEqual(
+    value.automationOptions.map((option) => option.key),
+    ["auto_verify", "fix"],
+  );
+
+  await act(async () => {
+    pendingResponses[0](
+      jsonResponse({
+        ...policy,
+        reporter: { identity_verified: false, access_level: "default" },
+        ask_options: [],
+      }),
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+  });
+  assert.equal(value.policyStatus, "ready");
+  assert.deepEqual(
+    value.automationOptions.map((option) => option.key),
+    ["auto_verify", "fix"],
+  );
+
+  await act(async () => renderer.unmount());
+});

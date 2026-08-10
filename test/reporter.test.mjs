@@ -166,6 +166,76 @@ test("policy lookup resolves a fresh session and accepts only verified allowlist
   assert.doesNotMatch(JSON.stringify(second), /policy-session/);
 });
 
+test("policy discovery retries while application identity is still hydrating", async () => {
+  const sessionTokens = [null, "hydrated-policy-session"];
+  const requests = [];
+  const reporter = createBugReporter(
+    reporterConfig({
+      applicationSessionTokenProvider: () => sessionTokens.shift(),
+      fetch: async (_url, init) => {
+        requests.push(init);
+        return jsonResponse(
+          init.headers[APPLICATION_SESSION_TOKEN_HEADER]
+            ? validPolicy
+            : {
+                ...validPolicy,
+                reporter: {
+                  identity_verified: false,
+                  access_level: "default",
+                },
+                ask_options: [],
+              },
+        );
+      },
+    }),
+  );
+
+  const policy = await reporter.discoverPolicy();
+
+  assert.equal(requests.length, 2);
+  assert.equal(
+    requests[0].headers[APPLICATION_SESSION_TOKEN_HEADER],
+    undefined,
+  );
+  assert.equal(
+    requests[1].headers[APPLICATION_SESSION_TOKEN_HEADER],
+    "hydrated-policy-session",
+  );
+  assert.equal(policy?.identityVerified, true);
+  assert.equal(reporter.currentPolicy, policy);
+});
+
+test("an older policy lookup cannot replace a newer verified policy", async () => {
+  const pendingResponses = [];
+  const reporter = createBugReporter(
+    reporterConfig({
+      fetch: async () =>
+        new Promise((resolve) => {
+          pendingResponses.push(resolve);
+        }),
+    }),
+  );
+
+  const olderLookup = reporter.discoverPolicy();
+  await new Promise((resolve) => setImmediate(resolve));
+  const newerLookup = reporter.discoverPolicy();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  pendingResponses[1](jsonResponse(validPolicy));
+  const verifiedPolicy = await newerLookup;
+  pendingResponses[0](
+    jsonResponse({
+      ...validPolicy,
+      reporter: { identity_verified: false, access_level: "default" },
+      ask_options: [],
+    }),
+  );
+  assert.equal(await olderLookup, null);
+
+  assert.equal(reporter.currentPolicy, verifiedPolicy);
+  assert.equal(reporter.currentPolicy?.identityVerified, true);
+});
+
 test("unverified, mismatched, failed, and malformed policies fall back to vanilla", async () => {
   const responses = [
     jsonResponse({
@@ -187,11 +257,17 @@ test("unverified, mismatched, failed, and malformed policies fall back to vanill
 });
 
 test("policy discovery has a bounded vanilla fallback when identity resolution stalls", async () => {
+  let releaseIdentity;
+  let fetchCalls = 0;
+  const pendingIdentity = new Promise((resolve) => {
+    releaseIdentity = resolve;
+  });
   const reporter = createBugReporter(
     reporterConfig({
       policyDiscoveryTimeoutMs: 20,
-      applicationSessionTokenProvider: () => new Promise(() => {}),
+      applicationSessionTokenProvider: () => pendingIdentity,
       fetch: async () => {
+        fetchCalls += 1;
         throw new Error("policy fetch should not start without identity");
       },
     }),
@@ -200,6 +276,9 @@ test("policy discovery has a bounded vanilla fallback when identity resolution s
   assert.equal(reporter.configuration.policyDiscoveryTimeoutMs, 20);
   assert.equal(await reporter.discoverPolicy(), null);
   assert.equal(reporter.currentPolicy, null);
+  releaseIdentity("identity-that-resolved-after-timeout");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(fetchCalls, 0);
 });
 
 test("submission retries idempotently with fresh session headers and filtered automation", async () => {

@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import type {
@@ -221,6 +222,7 @@ export function HandrailBugReporterProvider({
   );
   const [submission, setSubmission] =
     useState<BugReporterSubmissionState>(EMPTY_SUBMISSION);
+  const policyDiscoveryGeneration = useRef(0);
 
   const applyPolicy = useCallback((nextPolicy: BugReporterPolicy | null) => {
     setPolicy(nextPolicy);
@@ -235,20 +237,26 @@ export function HandrailBugReporterProvider({
   }, []);
 
   const refreshPolicy = useCallback(async () => {
+    const generation = ++policyDiscoveryGeneration.current;
     setPolicy(null);
     setPolicyStatus("loading");
     try {
       const nextPolicy = await reporter.discoverPolicy();
-      applyPolicy(nextPolicy);
+      if (generation === policyDiscoveryGeneration.current) {
+        applyPolicy(nextPolicy);
+      }
       return nextPolicy;
     } catch {
-      applyPolicy(null);
+      if (generation === policyDiscoveryGeneration.current) {
+        applyPolicy(null);
+      }
       return null;
     }
   }, [applyPolicy, reporter]);
 
   useEffect(() => {
     let active = true;
+    const generation = ++policyDiscoveryGeneration.current;
     if (!loadPolicyOnMount) {
       setPolicy(null);
       setPolicyStatus("idle");
@@ -261,14 +269,19 @@ export function HandrailBugReporterProvider({
     setPolicyStatus("loading");
     void reporter.discoverPolicy(controller.signal).then(
       (nextPolicy) => {
-        if (active) applyPolicy(nextPolicy);
+        if (active && generation === policyDiscoveryGeneration.current) {
+          applyPolicy(nextPolicy);
+        }
       },
       () => {
-        if (active) applyPolicy(null);
+        if (active && generation === policyDiscoveryGeneration.current) {
+          applyPolicy(null);
+        }
       },
     );
     return () => {
       active = false;
+      policyDiscoveryGeneration.current += 1;
       controller.abort();
     };
   }, [applyPolicy, loadPolicyOnMount, reporter]);

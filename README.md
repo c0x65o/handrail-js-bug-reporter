@@ -112,7 +112,10 @@ Policy discovery falls back to vanilla reporting after five seconds by
 default, so a stalled application-session resolver or policy endpoint cannot
 leave optional-action controls loading indefinitely. Override the bounded
 deadline with `policyDiscoveryTimeoutMs`; it applies only to policy discovery,
-not report submission.
+not report submission. If identity is still hydrating or a transient policy
+request fails, discovery briefly re-resolves the current session within that
+same deadline. Concurrent refreshes are latest-request-wins, so an older lookup
+cannot erase a newer verified policy.
 
 Submission intersects caller selections with the most recently verified
 policy response. When there is no verified current policy or no current

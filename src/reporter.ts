@@ -242,6 +242,7 @@ const MAX_UPSTREAM_ERROR_CODE_CHARACTERS = 120;
 const MAX_REQUEST_ID_CHARACTERS = 200;
 const DEFAULT_POLICY_DISCOVERY_TIMEOUT_MS = 5_000;
 const MAX_POLICY_DISCOVERY_TIMEOUT_MS = 30_000;
+const POLICY_IDENTITY_RETRY_DELAYS_MS = Object.freeze([100, 250]);
 const POLICY_DISCOVERY_INTERRUPTED = Symbol("policy discovery interrupted");
 
 function cleanString(value: unknown): string | null {
@@ -675,6 +676,7 @@ export class HandrailBugReporterClient {
   private readonly fetchImpl: typeof fetch | null;
   private readonly identityAdapter: ReporterIdentityAdapter;
   #policy: BugReporterPolicy | null = null;
+  #policyDiscoveryGeneration = 0;
 
   constructor(config: BugReporterConfig, identityAdapter: ReporterIdentityAdapter) {
     const enabled = config.enabled !== false;
@@ -748,6 +750,7 @@ export class HandrailBugReporterClient {
   }
 
   async discoverPolicy(signal?: AbortSignal): Promise<BugReporterPolicy | null> {
+    const generation = ++this.#policyDiscoveryGeneration;
     this.#policy = null;
     if (this.configuration.status !== "ready") return null;
     const endpoint = new URL(
@@ -784,25 +787,59 @@ export class HandrailBugReporterClient {
     else signal?.addEventListener("abort", interrupt, { once: true });
 
     const lookup = (async (): Promise<BugReporterPolicy | null> => {
-      const request = await this.requestWithRetries(policyUrl, {
-        method: "GET",
-        signal: controller.signal,
-      });
-      const response = request.response;
-      if (!response?.ok) return null;
-      let body: unknown;
-      try {
-        body = await response.json();
-      } catch {
-        return null;
+      const identityMayStillBeHydrating =
+        typeof this.sessionProvider === "function" ||
+        this.transport === "same-origin";
+      for (
+        let policyAttempt = 0;
+        policyAttempt <= POLICY_IDENTITY_RETRY_DELAYS_MS.length;
+        policyAttempt += 1
+      ) {
+        if (policyAttempt > 0) {
+          await sleep(POLICY_IDENTITY_RETRY_DELAYS_MS[policyAttempt - 1]);
+          if (controller.signal.aborted) return null;
+        }
+        const request = await this.requestWithRetries(policyUrl, {
+          method: "GET",
+          signal: controller.signal,
+        });
+        const response = request.response;
+        if (!response?.ok) {
+          const retryableResponse =
+            identityMayStillBeHydrating &&
+            (!response || TRANSIENT_STATUS_CODES.has(response.status));
+          if (
+            !retryableResponse ||
+            policyAttempt === POLICY_IDENTITY_RETRY_DELAYS_MS.length
+          ) {
+            return null;
+          }
+          continue;
+        }
+        let body: unknown;
+        try {
+          body = await response.json();
+        } catch {
+          return null;
+        }
+        const policy = this.parsePolicy(body);
+        if (policy) return policy;
+        if (
+          !identityMayStillBeHydrating ||
+          policyAttempt === POLICY_IDENTITY_RETRY_DELAYS_MS.length
+        ) {
+          return null;
+        }
       }
-      return this.parsePolicy(body);
+      return null;
     })();
 
     try {
       const result = await Promise.race([lookup, interrupted]);
       if (result === POLICY_DISCOVERY_INTERRUPTED) return null;
-      this.#policy = result;
+      if (generation === this.#policyDiscoveryGeneration) {
+        this.#policy = result;
+      }
       return result;
     } catch {
       return null;
@@ -1028,10 +1065,19 @@ export class HandrailBugReporterClient {
     let lastResponse: Response | null = null;
     let lastSensitiveValues: readonly string[] = [];
     for (let attempt = 0; attempt < this.maxAttempts; attempt += 1) {
+      if (input.signal?.aborted) {
+        return Object.freeze({ response: null, sensitiveValues: [] });
+      }
       if (attempt > 0) {
         await sleep(this.retryDelayMs * 2 ** (attempt - 1));
+        if (input.signal?.aborted) {
+          return Object.freeze({ response: null, sensitiveValues: [] });
+        }
       }
       const applicationSessionToken = await this.freshSessionToken();
+      if (input.signal?.aborted) {
+        return Object.freeze({ response: null, sensitiveValues: [] });
+      }
       lastSensitiveValues = [
         ...(this.transport === "direct" && this.reportToken
           ? [this.reportToken]
