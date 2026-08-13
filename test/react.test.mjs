@@ -31,12 +31,40 @@ function jsonResponse(body, status = 200) {
   });
 }
 
-function Harness({ config, onValue, initialForm }) {
+function Harness({ config, onValue, initialForm, ...providerProps }) {
   return createElement(
     HandrailBugReporterProvider,
-    { config, initialForm },
+    { config, initialForm, ...providerProps },
     createElement(Probe, { onValue }),
   );
+}
+
+function trackedBug(id, stage = "submitted") {
+  return {
+    id,
+    title: `Bug ${id}`,
+    severity: "sev3",
+    environment: "staging",
+    status: stage === "submitted" ? "reported" : "in_progress",
+    status_rollup: {
+      stage,
+      label: stage === "submitted" ? "Submitted" : "Fix in progress",
+      terminal: false,
+      raw_status: stage === "submitted" ? "reported" : "in_progress",
+      workflow_state: stage === "submitted" ? "reported" : "fixing",
+      environment: null,
+      version: null,
+      updated_at: "2026-08-13T18:00:00.000Z",
+    },
+    occurrence_count: 1,
+    reporter_occurrence_count: 1,
+    first_reported_at: "2026-08-13T18:00:00.000Z",
+    last_reported_at: "2026-08-13T18:00:00.000Z",
+    created_at: "2026-08-13T18:00:00.000Z",
+    updated_at: "2026-08-13T18:00:00.000Z",
+    fixed_at: null,
+    closed_at: null,
+  };
 }
 
 function Probe({ onValue }) {
@@ -169,6 +197,65 @@ test("headless React remains operational without policy or application identity"
     submitted.headers["x-handrail-application-session-token"],
     undefined,
   );
+  await act(async () => renderer.unmount());
+});
+
+test("headless React refreshes and appends bounded bug history pages", async () => {
+  const historyUrls = [];
+  const config = {
+    apiBaseUrl: "https://handrail.example/api",
+    projectId: "project-123",
+    environment: "staging",
+    reportToken: "public-token",
+    applicationSessionTokenProvider: () => "history-session",
+    fetch: async (url) => {
+      historyUrls.push(String(url));
+      const secondPage = String(url).includes("cursor=page-2");
+      return jsonResponse({
+        contract_version: "v1",
+        bugs: secondPage
+          ? [trackedBug("bug-2", "fixing")]
+          : [trackedBug("bug-1")],
+        pagination: {
+          limit: 1,
+          has_more: !secondPage,
+          next_cursor: secondPage ? null : "page-2",
+        },
+      });
+    },
+  };
+  let value;
+  let renderer;
+  await act(async () => {
+    renderer = create(createElement(Harness, {
+      config,
+      loadPolicyOnMount: false,
+      historyPageSize: 1,
+      onValue: (next) => {
+        value = next;
+      },
+    }));
+  });
+  assert.equal(value.tracking.status, "idle");
+
+  await act(async () => {
+    await value.refreshBugs();
+  });
+  assert.equal(value.tracking.status, "ready");
+  assert.deepEqual(value.tracking.bugs.map((bug) => bug.id), ["bug-1"]);
+  assert.equal(value.tracking.hasMore, true);
+
+  await act(async () => {
+    await value.loadMoreBugs();
+  });
+  assert.deepEqual(
+    value.tracking.bugs.map((bug) => [bug.id, bug.status_rollup.stage]),
+    [["bug-1", "submitted"], ["bug-2", "fixing"]],
+  );
+  assert.equal(value.tracking.hasMore, false);
+  assert.match(historyUrls[0], /limit=1/);
+  assert.match(historyUrls[1], /cursor=page-2/);
+
   await act(async () => renderer.unmount());
 });
 

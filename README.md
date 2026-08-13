@@ -199,7 +199,8 @@ resolver returns nothing or throws, submission continues as a vanilla report.
 
 When the application session is held in an HttpOnly cookie, browser JavaScript
 must not read or copy it. Mount a Web `Request`/`Response` forwarding handler
-on the application server at `/api/mobile-bug-reports` and its `/policy` child:
+on the application server at `/api/mobile-bug-reports`; the same handler owns
+its `/policy`, `/mine`, and `/bugs/:bugId` children:
 
 ```ts
 import {
@@ -237,6 +238,45 @@ Same-origin mode accepts only an absolute-path `apiBaseUrl`, sends credentials
 with same-origin semantics, and is deliberately misconfigured if a report
 token or application-session provider is placed in browser configuration.
 
+### Track the current user's bugs
+
+Verified Known Users can list and inspect the canonical bugs created by their
+own JavaScript reporter submissions. Anonymous and token-only submissions still
+work, but they never grant history access.
+
+```ts
+const firstPage = await reporter.listBugs({ limit: 10 });
+
+for (const bug of firstPage.bugs) {
+  console.log(bug.title, bug.status_rollup.label);
+}
+
+const current = await reporter.getBug(firstPage.bugs[0].id);
+
+if (firstPage.pagination.has_more) {
+  const nextPage = await reporter.listBugs({
+    limit: 10,
+    cursor: firstPage.pagination.next_cursor!,
+  });
+}
+```
+
+History is newest-first and uses opaque keyset cursors rather than offsets. The
+default page size is 20 and Handrail caps pages at 50, so applications should
+render the first page and load more only on demand. Repeated crash occurrences
+collapse to one canonical bug; `occurrence_count` is the global canonical count
+and `reporter_occurrence_count` is the current user's count.
+
+`status_rollup.stage` is one of `submitted`, `verifying`, `verified`, `fixing`,
+`fixed`, `deployed`, `closed`, `not_reproduced`, `wont_fix`, or
+`needs_attention`. The rollup uses Handrail's canonical verification, fix, and
+bug-run evidence. `deployed` requires an exact recorded delivery artifact and
+prefers production evidence over staging; a completed fix is not mislabeled as
+deployed.
+
+Each successful submission result also exposes `bugId`, allowing a caller to
+retain the canonical identity and later pass it to `getBug`.
+
 ### Headless React adoption
 
 The React entry point owns state but renders no UI. Keep its configuration
@@ -258,6 +298,7 @@ function BugReportForm() {
   // bugReport.setAutomationRequest
   // bugReport.replaceScreenshot / removeScreenshot / canAttachScreenshot
   // bugReport.submission / submit / resetSubmission
+  // bugReport.tracking / refreshBugs / loadMoreBugs
   return null;
 }
 
@@ -287,6 +328,9 @@ attachment. When policy or identity is unavailable, `isVanilla` is true,
 automation selections are cleared, and the same `submit` action still sends a
 vanilla report. The provider installs no global event listeners and uses no
 cookies, local storage, session storage, analytics, or background persistence.
+Bug history is also opt-in: call `refreshBugs` when the application opens its
+“My bugs” surface, then call `loadMoreBugs` while `tracking.hasMore` is true.
+Set `historyPageSize` on the provider to request a page size from 1 through 50.
 
 Every stamped report includes authoritative values for:
 

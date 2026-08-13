@@ -42,6 +42,35 @@ function reporterConfig(overrides = {}) {
   };
 }
 
+function trackedBug(overrides = {}) {
+  return {
+    id: "bug-123",
+    title: "Checkout failure",
+    severity: "sev2",
+    environment: "staging",
+    status: "in_progress",
+    status_rollup: {
+      stage: "fixing",
+      label: "Fix in progress",
+      terminal: false,
+      raw_status: "in_progress",
+      workflow_state: "fixing",
+      environment: null,
+      version: null,
+      updated_at: "2026-08-13T18:00:00.000Z",
+    },
+    occurrence_count: 3,
+    reporter_occurrence_count: 2,
+    first_reported_at: "2026-08-12T18:00:00.000Z",
+    last_reported_at: "2026-08-13T18:00:00.000Z",
+    created_at: "2026-08-12T18:00:00.000Z",
+    updated_at: "2026-08-13T18:00:00.000Z",
+    fixed_at: null,
+    closed_at: null,
+    ...overrides,
+  };
+}
+
 test("normalizes Handrail origins, /api bases, relative paths, and full endpoints", () => {
   const cases = [
     [
@@ -69,6 +98,8 @@ test("normalizes Handrail origins, /api bases, relative paths, and full endpoint
     assert.deepEqual(normalizeBugReporterEndpoints(input), {
       reports,
       policy: `${reports}/policy`,
+      history: `${reports}/mine`,
+      bugs: `${reports}/bugs`,
     });
   }
   assert.throws(
@@ -327,6 +358,7 @@ test("submission retries idempotently with fresh session headers and filtered au
   assert.deepEqual(result, {
     status: "submitted",
     statusCode: 201,
+    bugId: "bug-123",
     response: { bug_id: "bug-123" },
   });
   const submissions = requests.filter(
@@ -362,6 +394,86 @@ test("submission retries idempotently with fresh session headers and filtered au
   assert.doesNotMatch(
     submissions.map((request) => request.init.body).join("\n"),
     /submission-session/,
+  );
+});
+
+test("verified reporters page and look up their bugs with fresh session headers", async () => {
+  const calls = [];
+  let sessionNumber = 0;
+  const reporter = createBugReporter(reporterConfig({
+    applicationSessionTokenProvider: () => `history-session-${++sessionNumber}`,
+    fetch: async (url, init) => {
+      calls.push({ url: String(url), init });
+      if (String(url).includes("/mine")) {
+        return jsonResponse({
+          contract_version: "v1",
+          bugs: [trackedBug()],
+          pagination: {
+            limit: 10,
+            has_more: true,
+            next_cursor: "opaque-page-2",
+          },
+        });
+      }
+      return jsonResponse({
+        contract_version: "v1",
+        bug: trackedBug({
+          status: "fixed",
+          status_rollup: {
+            ...trackedBug().status_rollup,
+            stage: "fixed",
+            label: "Fixed",
+            raw_status: "fixed",
+          },
+        }),
+      });
+    },
+  }));
+
+  const page = await reporter.listBugs({ limit: 10, cursor: "opaque-page-1" });
+  assert.equal(page.bugs[0].status_rollup.stage, "fixing");
+  assert.equal(page.bugs[0].reporter_occurrence_count, 2);
+  assert.equal(page.pagination.next_cursor, "opaque-page-2");
+  const current = await reporter.getBug("bug/123");
+  assert.equal(current.status_rollup.stage, "fixed");
+
+  assert.match(calls[0].url, /\/mine\?/);
+  assert.match(calls[0].url, /project_id=project-123/);
+  assert.match(calls[0].url, /environment=staging/);
+  assert.match(calls[0].url, /limit=10/);
+  assert.match(calls[0].url, /cursor=opaque-page-1/);
+  assert.match(calls[1].url, /\/bugs\/bug%2F123\?/);
+  assert.deepEqual(
+    calls.map((call) => call.init.headers[APPLICATION_SESSION_TOKEN_HEADER]),
+    ["history-session-1", "history-session-2"],
+  );
+  assert.ok(calls.every((call) => call.init.body === undefined));
+});
+
+test("bug tracking rejects malformed pages and preserves bounded upstream diagnostics", async () => {
+  const malformed = createBugReporter(reporterConfig({
+    fetch: async () => jsonResponse({ contract_version: "v1", bugs: [] }),
+  }));
+  await assert.rejects(
+    malformed.listBugs(),
+    (error) => error instanceof BugReporterError
+      && error.code === "tracking_rejected",
+  );
+
+  const rejected = createBugReporter(reporterConfig({
+    applicationSessionTokenProvider: () => "history-secret",
+    fetch: async () => jsonResponse({
+      code: "bug_history_identity_required",
+      error: "A verified application user is required.",
+    }, 403),
+  }));
+  await assert.rejects(
+    rejected.listBugs(),
+    (error) => error instanceof BugReporterError
+      && error.code === "tracking_rejected"
+      && error.statusCode === 403
+      && error.upstreamCode === "bug_history_identity_required"
+      && !error.message.includes("history-secret"),
   );
 });
 

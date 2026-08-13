@@ -43,6 +43,10 @@ export type {
   BugReporterUpstreamError,
   BugReporterPolicy,
   BugReportSubmissionResult,
+  BugTrackingListOptions,
+  BugTrackingPage,
+  BugTrackingStage,
+  BugTrackingStatusRollup,
   BugReporterTransport,
   JsonObject,
   JsonPrimitive,
@@ -52,6 +56,7 @@ export type {
   ReporterRetryOptions,
   ScreenshotAttachment,
   SubmissionOptions,
+  TrackedBugRecord,
 } from "./reporter";
 
 export const SDK_RUNTIME = "browser" as const;

@@ -4,7 +4,9 @@ import {
   createBugReporter,
   stampReport as stampBrowserReport,
   type BugReporterPolicy,
+  type BugTrackingPage,
   type ReporterSdkIdentity,
+  type TrackedBugRecord,
 } from "@handrail/bug-reporter";
 import {
   SDK_IDENTITY as serverIdentity,
@@ -98,6 +100,10 @@ const submissionPromise = reporter.submit(
 );
 void policyPromise;
 void submissionPromise;
+const bugPagePromise: Promise<BugTrackingPage> = reporter.listBugs({ limit: 10 });
+const trackedBugPromise: Promise<TrackedBugRecord> = reporter.getBug("bug-123");
+void bugPagePromise;
+void trackedBugPromise;
 
 const rejection = new BugReporterError(
   "submission_rejected",

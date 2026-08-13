@@ -27,8 +27,10 @@ import {
   type BugReporterConfig,
   type BugReporterPolicy,
   type BugReportSubmissionResult,
+  type BugTrackingPage,
   type HandrailBugReporterClient,
   type ScreenshotAttachment,
+  type TrackedBugRecord,
 } from "./reporter";
 
 export {
@@ -67,6 +69,10 @@ export type {
   BugReporterUpstreamError,
   BugReporterPolicy,
   BugReportSubmissionResult,
+  BugTrackingListOptions,
+  BugTrackingPage,
+  BugTrackingStage,
+  BugTrackingStatusRollup,
   BugReporterTransport,
   JsonObject,
   JsonPrimitive,
@@ -76,6 +82,7 @@ export type {
   ReporterRetryOptions,
   ScreenshotAttachment,
   SubmissionOptions,
+  TrackedBugRecord,
 } from "./reporter";
 
 export const SDK_RUNTIME = "react" as const;
@@ -145,6 +152,20 @@ export interface BugReporterSubmissionState {
   readonly error: BugReporterError | null;
 }
 
+export type BugReporterTrackingStatus =
+  | "idle"
+  | "loading"
+  | "ready"
+  | "error";
+
+export interface BugReporterTrackingState {
+  readonly status: BugReporterTrackingStatus;
+  readonly bugs: readonly TrackedBugRecord[];
+  readonly hasMore: boolean;
+  readonly nextCursor: string | null;
+  readonly error: BugReporterError | null;
+}
+
 export interface HandrailBugReporterContextValue {
   readonly reporter: HandrailBugReporterClient;
   readonly policy: BugReporterPolicy | null;
@@ -165,6 +186,9 @@ export interface HandrailBugReporterContextValue {
   ): Promise<BugReportSubmissionResult>;
   readonly submission: BugReporterSubmissionState;
   resetSubmission(): void;
+  readonly tracking: BugReporterTrackingState;
+  refreshBugs(): Promise<BugTrackingPage>;
+  loadMoreBugs(): Promise<BugTrackingPage | null>;
 }
 
 export interface HandrailBugReporterProviderProps extends PropsWithChildren {
@@ -172,11 +196,21 @@ export interface HandrailBugReporterProviderProps extends PropsWithChildren {
   readonly initialForm?: Partial<BugReporterFormState>;
   /** Policy discovery is best effort and enabled by default. */
   readonly loadPolicyOnMount?: boolean;
+  /** Number of bugs requested per keyset page. Defaults to 20; maximum 50. */
+  readonly historyPageSize?: number;
 }
 
 const EMPTY_SUBMISSION: BugReporterSubmissionState = Object.freeze({
   status: "idle",
   result: null,
+  error: null,
+});
+
+const EMPTY_TRACKING: BugReporterTrackingState = Object.freeze({
+  status: "idle",
+  bugs: Object.freeze([]),
+  hasMore: false,
+  nextCursor: null,
   error: null,
 });
 
@@ -212,6 +246,7 @@ export function HandrailBugReporterProvider({
   config,
   initialForm,
   loadPolicyOnMount = true,
+  historyPageSize = 20,
 }: HandrailBugReporterProviderProps): ReactElement {
   const reporter = useMemo(() => createBugReporter(config), [config]);
   const [policy, setPolicy] = useState<BugReporterPolicy | null>(null);
@@ -222,7 +257,15 @@ export function HandrailBugReporterProvider({
   );
   const [submission, setSubmission] =
     useState<BugReporterSubmissionState>(EMPTY_SUBMISSION);
+  const [tracking, setTracking] =
+    useState<BugReporterTrackingState>(EMPTY_TRACKING);
   const policyDiscoveryGeneration = useRef(0);
+  const trackingGeneration = useRef(0);
+
+  useEffect(() => {
+    trackingGeneration.current += 1;
+    setTracking(EMPTY_TRACKING);
+  }, [reporter]);
 
   const applyPolicy = useCallback((nextPolicy: BugReporterPolicy | null) => {
     setPolicy(nextPolicy);
@@ -367,6 +410,83 @@ export function HandrailBugReporterProvider({
     setSubmission(EMPTY_SUBMISSION);
   }, []);
 
+  const refreshBugs = useCallback(async () => {
+    const generation = ++trackingGeneration.current;
+    setTracking((current) => ({ ...current, status: "loading", error: null }));
+    try {
+      const page = await reporter.listBugs({ limit: historyPageSize });
+      if (generation === trackingGeneration.current) {
+        setTracking({
+          status: "ready",
+          bugs: page.bugs,
+          hasMore: page.pagination.has_more,
+          nextCursor: page.pagination.next_cursor,
+          error: null,
+        });
+      }
+      return page;
+    } catch (error) {
+      const safeError = error instanceof BugReporterError
+        ? error
+        : new BugReporterError(
+            "tracking_unavailable",
+            "Bug history could not be loaded. Please try again.",
+          );
+      if (generation === trackingGeneration.current) {
+        setTracking((current) => ({
+          ...current,
+          status: "error",
+          error: safeError,
+        }));
+      }
+      throw safeError;
+    }
+  }, [historyPageSize, reporter]);
+
+  const loadMoreBugs = useCallback(async () => {
+    if (!tracking.hasMore || !tracking.nextCursor || tracking.status === "loading") {
+      return null;
+    }
+    const generation = ++trackingGeneration.current;
+    setTracking((current) => ({ ...current, status: "loading", error: null }));
+    try {
+      const page = await reporter.listBugs({
+        limit: historyPageSize,
+        cursor: tracking.nextCursor,
+      });
+      if (generation === trackingGeneration.current) {
+        setTracking((current) => ({
+          status: "ready",
+          bugs: [
+            ...current.bugs,
+            ...page.bugs.filter((bug) => (
+              !current.bugs.some((existing) => existing.id === bug.id)
+            )),
+          ],
+          hasMore: page.pagination.has_more,
+          nextCursor: page.pagination.next_cursor,
+          error: null,
+        }));
+      }
+      return page;
+    } catch (error) {
+      const safeError = error instanceof BugReporterError
+        ? error
+        : new BugReporterError(
+            "tracking_unavailable",
+            "Bug history could not be loaded. Please try again.",
+          );
+      if (generation === trackingGeneration.current) {
+        setTracking((current) => ({
+          ...current,
+          status: "error",
+          error: safeError,
+        }));
+      }
+      throw safeError;
+    }
+  }, [historyPageSize, reporter, tracking.hasMore, tracking.nextCursor, tracking.status]);
+
   const value = useMemo<HandrailBugReporterContextValue>(
     () => ({
       reporter,
@@ -385,12 +505,17 @@ export function HandrailBugReporterProvider({
       submit,
       submission,
       resetSubmission,
+      tracking,
+      refreshBugs,
+      loadMoreBugs,
     }),
     [
       form,
       policy,
       policyStatus,
       refreshPolicy,
+      refreshBugs,
+      loadMoreBugs,
       removeScreenshot,
       replaceScreenshot,
       reporter,
@@ -398,6 +523,7 @@ export function HandrailBugReporterProvider({
       setAutomationRequest,
       submission,
       submit,
+      tracking,
       updateForm,
     ],
   );

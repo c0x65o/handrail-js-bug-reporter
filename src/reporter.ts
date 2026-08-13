@@ -34,6 +34,8 @@ export interface JsonObject {
 export interface BugReporterEndpoints {
   readonly reports: string;
   readonly policy: string;
+  readonly history: string;
+  readonly bugs: string;
 }
 
 export interface AutomationOption {
@@ -143,11 +145,72 @@ export interface SubmissionOptions {
   readonly signal?: AbortSignal;
 }
 
+export type BugTrackingStage =
+  | "submitted"
+  | "verifying"
+  | "verified"
+  | "fixing"
+  | "fixed"
+  | "deployed"
+  | "closed"
+  | "not_reproduced"
+  | "wont_fix"
+  | "needs_attention";
+
+export interface BugTrackingStatusRollup {
+  readonly stage: BugTrackingStage;
+  readonly label: string;
+  readonly terminal: boolean;
+  readonly raw_status: string;
+  readonly workflow_state: string | null;
+  readonly environment: string | null;
+  readonly version: string | null;
+  readonly updated_at: string | null;
+}
+
+export interface TrackedBugRecord {
+  readonly id: string;
+  readonly title: string;
+  readonly severity: string;
+  readonly environment: string;
+  readonly status: string;
+  readonly status_rollup: BugTrackingStatusRollup;
+  /** Canonical occurrences across all reporters for a grouped crash. */
+  readonly occurrence_count: number;
+  /** Occurrences submitted by the current verified application user. */
+  readonly reporter_occurrence_count: number;
+  readonly first_reported_at: string | null;
+  readonly last_reported_at: string | null;
+  readonly created_at: string | null;
+  readonly updated_at: string | null;
+  readonly fixed_at: string | null;
+  readonly closed_at: string | null;
+}
+
+export interface BugTrackingPage {
+  readonly contract_version: "v1";
+  readonly bugs: readonly TrackedBugRecord[];
+  readonly pagination: {
+    readonly limit: number;
+    readonly has_more: boolean;
+    readonly next_cursor: string | null;
+  };
+}
+
+export interface BugTrackingListOptions {
+  /** Defaults to 20 and is capped by Handrail at 50. */
+  readonly limit?: number;
+  /** Opaque keyset cursor returned by the previous page. */
+  readonly cursor?: string;
+  readonly signal?: AbortSignal;
+}
+
 export type BugReportSubmissionResult =
   | Readonly<{ status: "disabled" }>
   | Readonly<{
       status: "submitted";
       statusCode: number;
+      bugId: string | null;
       response: JsonValue | null;
     }>;
 
@@ -157,7 +220,9 @@ export type BugReporterErrorCode =
   | "invalid_screenshot"
   | "redaction_failed"
   | "request_failed"
-  | "submission_rejected";
+  | "submission_rejected"
+  | "tracking_unavailable"
+  | "tracking_rejected";
 
 export interface BugReporterUpstreamError {
   /** Stable error code returned by Handrail, when one is available. */
@@ -348,7 +413,12 @@ export function normalizeBugReporterEndpoints(
       );
     }
     const reports = endpointPath(input);
-    return Object.freeze({ reports, policy: `${reports}/policy` });
+    return Object.freeze({
+      reports,
+      policy: `${reports}/policy`,
+      history: `${reports}/mine`,
+      bugs: `${reports}/bugs`,
+    });
   }
 
   let url: URL;
@@ -374,7 +444,12 @@ export function normalizeBugReporterEndpoints(
   }
   url.pathname = endpointPath(url.pathname);
   const reports = url.toString();
-  return Object.freeze({ reports, policy: `${reports}/policy` });
+  return Object.freeze({
+    reports,
+    policy: `${reports}/policy`,
+    history: `${reports}/mine`,
+    bugs: `${reports}/bugs`,
+  });
 }
 
 function isSensitiveKey(key: string): boolean {
@@ -656,6 +731,123 @@ function jsonObjectOrNull(input: unknown): JsonValue | null {
   return value === OMIT ? null : value;
 }
 
+const BUG_TRACKING_STAGES = new Set<BugTrackingStage>([
+  "submitted",
+  "verifying",
+  "verified",
+  "fixing",
+  "fixed",
+  "deployed",
+  "closed",
+  "not_reproduced",
+  "wont_fix",
+  "needs_attention",
+]);
+
+function plainRecord(input: unknown): Record<string, unknown> | null {
+  return input && typeof input === "object" && !Array.isArray(input)
+    ? input as Record<string, unknown>
+    : null;
+}
+
+function nullableString(input: unknown): string | null {
+  return typeof input === "string" && input.trim() ? input.trim() : null;
+}
+
+function nonNegativeNumber(input: unknown, fallback: number): number {
+  const value = Number(input);
+  return Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+function trackedBugRecord(input: unknown): TrackedBugRecord | null {
+  const record = plainRecord(input);
+  const rollup = plainRecord(record?.status_rollup);
+  const stage = nullableString(rollup?.stage) as BugTrackingStage | null;
+  const id = nullableString(record?.id);
+  const title = nullableString(record?.title);
+  const severity = nullableString(record?.severity);
+  const environment = nullableString(record?.environment);
+  const status = nullableString(record?.status);
+  const label = nullableString(rollup?.label);
+  const rawStatus = nullableString(rollup?.raw_status);
+  if (
+    !record || !id || !title || !severity || !environment || !status || !label
+    || !rawStatus || !stage || !BUG_TRACKING_STAGES.has(stage)
+    || typeof rollup?.terminal !== "boolean"
+  ) {
+    return null;
+  }
+  return Object.freeze({
+    id,
+    title,
+    severity,
+    environment,
+    status,
+    status_rollup: Object.freeze({
+      stage,
+      label,
+      terminal: rollup.terminal,
+      raw_status: rawStatus,
+      workflow_state: nullableString(rollup.workflow_state),
+      environment: nullableString(rollup.environment),
+      version: nullableString(rollup.version),
+      updated_at: nullableString(rollup.updated_at),
+    }),
+    occurrence_count: nonNegativeNumber(record.occurrence_count, 1),
+    reporter_occurrence_count: nonNegativeNumber(
+      record.reporter_occurrence_count,
+      1,
+    ),
+    first_reported_at: nullableString(record.first_reported_at),
+    last_reported_at: nullableString(record.last_reported_at),
+    created_at: nullableString(record.created_at),
+    updated_at: nullableString(record.updated_at),
+    fixed_at: nullableString(record.fixed_at),
+    closed_at: nullableString(record.closed_at),
+  });
+}
+
+function trackingPage(input: unknown): BugTrackingPage | null {
+  const record = plainRecord(input);
+  const pagination = plainRecord(record?.pagination);
+  if (
+    !record
+    || record.contract_version !== "v1"
+    || !Array.isArray(record.bugs)
+    || !pagination
+    || typeof pagination.has_more !== "boolean"
+  ) return null;
+  const bugs = record.bugs.map(trackedBugRecord);
+  if (bugs.some((bug) => !bug)) return null;
+  const limit = Number(pagination.limit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 50) return null;
+  const nextCursor = nullableString(pagination.next_cursor);
+  if (pagination.has_more && !nextCursor) return null;
+  return Object.freeze({
+    contract_version: "v1",
+    bugs: Object.freeze(bugs as TrackedBugRecord[]),
+    pagination: Object.freeze({
+      limit,
+      has_more: pagination.has_more,
+      next_cursor: nextCursor,
+    }),
+  });
+}
+
+function urlWithQuery(
+  input: string,
+  values: Readonly<Record<string, string | number | null | undefined>>,
+): string {
+  const relative = input.startsWith("/");
+  const url = new URL(input, relative ? "http://relative.invalid" : undefined);
+  for (const [key, value] of Object.entries(values)) {
+    if (value !== null && value !== undefined && String(value).length > 0) {
+      url.searchParams.set(key, String(value));
+    }
+  }
+  return relative ? `${url.pathname}${url.search}` : url.toString();
+}
+
 export class HandrailBugReporterClient {
   readonly configuration: BugReporterConfigurationSnapshot;
 
@@ -910,8 +1102,119 @@ export class HandrailBugReporterClient {
     return Object.freeze({
       status: "submitted",
       statusCode: response.status,
+      bugId: nullableString(plainRecord(responseBody)?.bug_id),
       response: responseBody,
     });
+  }
+
+  /**
+   * List canonical bugs submitted by the current verified application user.
+   * Pages use opaque keyset cursors so deep histories remain bounded.
+   */
+  async listBugs(
+    options: BugTrackingListOptions = {},
+  ): Promise<BugTrackingPage> {
+    if (this.configuration.status !== "ready" || !this.endpoints) {
+      throw new BugReporterError(
+        "invalid_configuration",
+        "Bug reporting is not configured.",
+      );
+    }
+    const url = urlWithQuery(this.endpoints.history, {
+      project_id: this.projectId,
+      environment: this.environment,
+      limit: options.limit,
+      cursor: options.cursor,
+    });
+    const body = await this.trackingRequest(url, options.signal);
+    const page = trackingPage(body);
+    if (!page) {
+      throw new BugReporterError(
+        "tracking_rejected",
+        "Bug history returned an invalid response.",
+      );
+    }
+    return page;
+  }
+
+  /** Read one bug only when it belongs to the current verified reporter. */
+  async getBug(
+    bugId: string,
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<TrackedBugRecord> {
+    if (this.configuration.status !== "ready" || !this.endpoints) {
+      throw new BugReporterError(
+        "invalid_configuration",
+        "Bug reporting is not configured.",
+      );
+    }
+    const normalizedBugId = cleanString(bugId);
+    if (!normalizedBugId) {
+      throw new BugReporterError(
+        "tracking_rejected",
+        "A bug id is required.",
+      );
+    }
+    const url = urlWithQuery(
+      `${this.endpoints.bugs}/${encodeURIComponent(normalizedBugId)}`,
+      {
+        project_id: this.projectId,
+        environment: this.environment,
+      },
+    );
+    const body = plainRecord(await this.trackingRequest(url, options.signal));
+    const bug = body?.contract_version === "v1"
+      ? trackedBugRecord(body.bug)
+      : null;
+    if (!bug) {
+      throw new BugReporterError(
+        "tracking_rejected",
+        "Bug history returned an invalid response.",
+      );
+    }
+    return bug;
+  }
+
+  private async trackingRequest(
+    url: string,
+    signal?: AbortSignal,
+  ): Promise<unknown> {
+    if (this.configuration.status !== "ready" || !url) {
+      throw new BugReporterError(
+        "invalid_configuration",
+        "Bug reporting is not configured.",
+      );
+    }
+    const request = await this.requestWithRetries(url, {
+      method: "GET",
+      signal,
+    });
+    if (!request.response) {
+      throw new BugReporterError(
+        "tracking_unavailable",
+        "Bug history could not be loaded. Please try again.",
+      );
+    }
+    if (!request.response.ok) {
+      const upstream = await parseUpstreamError(
+        request.response,
+        request.sensitiveValues,
+      );
+      throw new BugReporterError(
+        "tracking_rejected",
+        "Bug history could not be loaded.",
+        request.response.status,
+        upstream,
+      );
+    }
+    try {
+      return await request.response.json();
+    } catch {
+      throw new BugReporterError(
+        "tracking_rejected",
+        "Bug history returned an invalid response.",
+      );
+    }
   }
 
   private async buildPayload(

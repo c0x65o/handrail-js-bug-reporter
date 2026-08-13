@@ -184,6 +184,55 @@ test("same-origin forwarding keeps HttpOnly cookies and server secrets out of br
   );
 });
 
+test("same-origin forwarding scopes paged bug history and lookup to server-owned identity", async () => {
+  const upstreamRequests = [];
+  const handler = createSameOriginBugReporterHandler(sharedConfig({
+    resolveApplicationSessionToken: () => "server-history-session",
+    fetch: async (url, init) => {
+      upstreamRequests.push({ url: String(url), init });
+      if (String(url).includes("/mine")) {
+        return jsonResponse({
+          contract_version: "v1",
+          bugs: [],
+          pagination: { limit: 25, has_more: false, next_cursor: null },
+        });
+      }
+      return jsonResponse({ contract_version: "v1", bug: { id: "bug-1" } });
+    },
+  }));
+
+  const history = await handler(new Request(
+    "https://app.example/api/mobile-bug-reports/mine?limit=25&cursor=opaque&project_id=attacker&environment=production&unexpected=ignored",
+  ));
+  assert.equal(history.status, 200);
+  assert.equal(history.headers.get("cache-control"), "private, no-store");
+  const lookup = await handler(new Request(
+    "https://app.example/api/mobile-bug-reports/bugs/bug%2F1?project_id=attacker",
+  ));
+  assert.equal(lookup.status, 200);
+
+  const historyUrl = new URL(upstreamRequests[0].url);
+  assert.equal(historyUrl.pathname, "/api/mobile-bug-reports/mine");
+  assert.equal(historyUrl.searchParams.get("project_id"), "project-123");
+  assert.equal(historyUrl.searchParams.get("environment"), "staging");
+  assert.equal(historyUrl.searchParams.get("limit"), "25");
+  assert.equal(historyUrl.searchParams.get("cursor"), "opaque");
+  assert.equal(historyUrl.searchParams.has("unexpected"), false);
+  assert.equal(
+    upstreamRequests[0].init.headers[APPLICATION_SESSION_TOKEN_HEADER],
+    "server-history-session",
+  );
+  assert.equal(upstreamRequests[0].init.body, undefined);
+  assert.match(upstreamRequests[1].url, /\/bugs\/bug%2F1\?/);
+
+  const crossSite = await handler(new Request(
+    "https://app.example/api/mobile-bug-reports/mine",
+    { headers: { origin: "https://attacker.example" } },
+  ));
+  assert.equal(crossSite.status, 403);
+  assert.equal(upstreamRequests.length, 2);
+});
+
 test("same-origin browser mode rejects browser-held secrets and preserves core payload behavior", async () => {
   let forwardedBody;
   const handler = createSameOriginBugReporterHandler(

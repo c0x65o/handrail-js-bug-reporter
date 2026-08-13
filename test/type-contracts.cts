@@ -14,6 +14,7 @@ const disabledSubmission = reporter.submit({
   title: "CommonJS browser issue",
   description: "Details",
 });
+const disabledBugHistory = reporter.listBugs({ limit: 10 });
 const requestReporters = server.createRequestScopedBugReporter({
   enabled: false,
   resolveApplicationSessionToken: (request: { session?: string }) =>
@@ -25,6 +26,7 @@ void browserRuntime;
 void nodeRuntime;
 void reactRuntime;
 void disabledSubmission;
+void disabledBugHistory;
 void requestReporter;
 void react.HandrailBugReporterProvider;
 void react.useHandrailBugReporter;

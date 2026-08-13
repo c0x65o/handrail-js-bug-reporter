@@ -50,6 +50,10 @@ export type {
   BugReporterUpstreamError,
   BugReporterPolicy,
   BugReportSubmissionResult,
+  BugTrackingListOptions,
+  BugTrackingPage,
+  BugTrackingStage,
+  BugTrackingStatusRollup,
   BugReporterTransport,
   JsonObject,
   JsonPrimitive,
@@ -59,6 +63,7 @@ export type {
   ReporterRetryOptions,
   ScreenshotAttachment,
   SubmissionOptions,
+  TrackedBugRecord,
 } from "./reporter";
 
 export const SDK_RUNTIME = "node" as const;
@@ -134,6 +139,8 @@ export interface SameOriginBugReporterHandlerConfig<RequestType extends Request 
   readonly projectId: string;
   readonly environment: string;
   readonly reportToken: string;
+  /** Same-origin mount path. Defaults to `/api/mobile-bug-reports`. */
+  readonly routeBasePath?: string;
   readonly resolveApplicationSessionToken?: ApplicationSessionTokenResolver<RequestType>;
 }
 
@@ -157,7 +164,10 @@ function clean(value: unknown): string | null {
 function forwardingJson(status: number, code: string): Response {
   return new Response(JSON.stringify({ error: code }), {
     status,
-    headers: { "content-type": "application/json" },
+    headers: {
+      "cache-control": "private, no-store",
+      "content-type": "application/json",
+    },
   });
 }
 
@@ -171,6 +181,34 @@ function retryDelay(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value)
     ? Math.min(30_000, Math.max(0, value))
     : 250;
+}
+
+function sameOriginRouteBasePath(value: unknown): string {
+  const path = clean(value || "/api/mobile-bug-reports")?.replace(/\/+$/u, "");
+  if (
+    !path
+    || !path.startsWith("/")
+    || path.startsWith("//")
+    || path.includes("?")
+    || path.includes("#")
+  ) {
+    throw new BugReporterError(
+      "invalid_configuration",
+      "Bug reporting is not configured.",
+    );
+  }
+  return path;
+}
+
+function sameOriginRequest(request: Request): boolean {
+  if (request.headers.get("sec-fetch-site") === "cross-site") return false;
+  const origin = request.headers.get("origin");
+  if (!origin) return true;
+  try {
+    return new URL(origin).origin === new URL(request.url).origin;
+  } catch {
+    return false;
+  }
 }
 
 function wait(milliseconds: number): Promise<void> {
@@ -224,7 +262,8 @@ function normalizeForwardedPayload(
 
 /**
  * Create a Web Request/Response handler that applications can mount on the
- * same origin at `/api/mobile-bug-reports` and its `/policy` child route.
+ * same origin at `/api/mobile-bug-reports`, including `/policy`, `/mine`, and
+ * principal-scoped `/bugs/:bugId` child routes.
  * Incoming cookies and authentication headers are consumed only by the
  * application's resolver and are never forwarded to Handrail.
  */
@@ -241,6 +280,7 @@ export function createSameOriginBugReporterHandler<
     config.reportTokenHeader === BUG_REPORT_TOKEN_HEADER
       ? BUG_REPORT_TOKEN_HEADER
       : "authorization";
+  const routeBasePath = sameOriginRouteBasePath(config.routeBasePath);
   const fetchImpl = config.fetch || globalThis.fetch;
   let endpoints: ReturnType<typeof normalizeBugReporterEndpoints> | null = null;
   try {
@@ -267,9 +307,36 @@ export function createSameOriginBugReporterHandler<
 
   return async (request: RequestType): Promise<Response> => {
     if (!enabled) return forwardingJson(404, "bug_reporting_disabled");
-    const isPolicy = request.method === "GET";
-    const isSubmission = request.method === "POST";
-    if (!isPolicy && !isSubmission) {
+    if (!sameOriginRequest(request)) {
+      return forwardingJson(403, "bug_reporter_cross_site_denied");
+    }
+    let incomingUrl: URL;
+    try {
+      incomingUrl = new URL(request.url);
+    } catch {
+      return forwardingJson(400, "invalid_bug_reporter_route");
+    }
+    if (
+      incomingUrl.pathname !== routeBasePath
+      && !incomingUrl.pathname.startsWith(`${routeBasePath}/`)
+    ) {
+      return forwardingJson(404, "bug_reporter_route_not_found");
+    }
+    const relativePath = incomingUrl.pathname
+      .slice(routeBasePath.length)
+      .replace(/^\/+|\/+$/gu, "");
+    const pathParts = relativePath ? relativePath.split("/") : [];
+    const isPolicy = request.method === "GET"
+      && pathParts.length === 1
+      && pathParts[0] === "policy";
+    const isHistory = request.method === "GET"
+      && pathParts.length === 1
+      && pathParts[0] === "mine";
+    const isLookup = request.method === "GET"
+      && pathParts.length === 2
+      && pathParts[0] === "bugs";
+    const isSubmission = request.method === "POST" && pathParts.length === 0;
+    if (!isPolicy && !isHistory && !isLookup && !isSubmission) {
       return new Response(null, {
         status: 405,
         headers: { allow: "GET, POST" },
@@ -307,12 +374,28 @@ export function createSameOriginBugReporterHandler<
       vanillaBody = JSON.stringify(vanillaPayload);
     }
 
-    const endpoint = isPolicy
-      ? new URL(endpoints!.policy)
-      : new URL(endpoints!.reports);
-    if (isPolicy) {
+    let endpoint: URL;
+    if (isPolicy) endpoint = new URL(endpoints!.policy);
+    else if (isHistory) endpoint = new URL(endpoints!.history);
+    else if (isLookup) {
+      let bugId: string;
+      try {
+        bugId = decodeURIComponent(pathParts[1]).trim();
+      } catch {
+        bugId = "";
+      }
+      if (!bugId) return forwardingJson(404, "bug_history_not_found");
+      endpoint = new URL(`${endpoints!.bugs}/${encodeURIComponent(bugId)}`);
+    } else endpoint = new URL(endpoints!.reports);
+    if (isPolicy || isHistory || isLookup) {
       endpoint.searchParams.set("project_id", projectId!);
       endpoint.searchParams.set("environment", environment!);
+    }
+    if (isHistory) {
+      const limit = incomingUrl.searchParams.get("limit");
+      const cursor = incomingUrl.searchParams.get("cursor");
+      if (limit) endpoint.searchParams.set("limit", limit);
+      if (cursor) endpoint.searchParams.set("cursor", cursor);
     }
 
     let upstream: Response | null = null;
@@ -338,7 +421,7 @@ export function createSameOriginBugReporterHandler<
       }
       try {
         upstream = await fetchImpl(endpoint, {
-          method: isPolicy ? "GET" : "POST",
+          method: isSubmission ? "POST" : "GET",
           headers,
           body: isSubmission
             ? applicationSessionToken
@@ -372,6 +455,7 @@ export function createSameOriginBugReporterHandler<
     return new Response(responseBody || null, {
       status: upstream.status,
       headers: {
+        "cache-control": "private, no-store",
         "content-type": upstream.headers.get("content-type") || "application/json",
       },
     });
