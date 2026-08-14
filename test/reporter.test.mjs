@@ -56,6 +56,7 @@ function trackedBug(overrides = {}) {
       raw_status: "in_progress",
       workflow_state: "fixing",
       environment: null,
+      fixed_version: null,
       version: null,
       updated_at: "2026-08-13T18:00:00.000Z",
     },
@@ -424,6 +425,7 @@ test("verified reporters page and look up their bugs with fresh session headers"
             stage: "fixed",
             label: "Fixed",
             raw_status: "fixed",
+            fixed_version: "1.4.0",
           },
         }),
       });
@@ -436,6 +438,7 @@ test("verified reporters page and look up their bugs with fresh session headers"
   assert.equal(page.pagination.next_cursor, "opaque-page-2");
   const current = await reporter.getBug("bug/123");
   assert.equal(current.status_rollup.stage, "fixed");
+  assert.equal(current.status_rollup.fixed_version, "1.4.0");
 
   assert.match(calls[0].url, /\/mine\?/);
   assert.match(calls[0].url, /project_id=project-123/);

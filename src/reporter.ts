@@ -164,6 +164,9 @@ export interface BugTrackingStatusRollup {
   readonly raw_status: string;
   readonly workflow_state: string | null;
   readonly environment: string | null;
+  /** Application version first known to contain the fix. */
+  readonly fixed_version: string | null;
+  /** Current deployed application version for deployed stages. */
   readonly version: string | null;
   readonly updated_at: string | null;
 }
@@ -790,6 +793,7 @@ function trackedBugRecord(input: unknown): TrackedBugRecord | null {
       raw_status: rawStatus,
       workflow_state: nullableString(rollup.workflow_state),
       environment: nullableString(rollup.environment),
+      fixed_version: nullableString(rollup.fixed_version),
       version: nullableString(rollup.version),
       updated_at: nullableString(rollup.updated_at),
     }),

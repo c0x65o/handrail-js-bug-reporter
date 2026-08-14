@@ -331,6 +331,12 @@ cookies, local storage, session storage, analytics, or background persistence.
 Bug history is also opt-in: call `refreshBugs` when the application opens its
 “My bugs” surface, then call `loadMoreBugs` while `tracking.hasMore` is true.
 Set `historyPageSize` on the provider to request a page size from 1 through 50.
+For fixed bugs, Handrail reports deployment by comparing the Work Request's
+fixed application version with the current environment version. Equal and later
+versions include the fix; missing or non-comparable version evidence is reported
+as unavailable. Commit identities do not decide this customer-facing status.
+The status rollup exposes `fixed_version` separately from `version`, which is
+the current deployed version when the stage is deployed.
 
 Every stamped report includes authoritative values for:
 
