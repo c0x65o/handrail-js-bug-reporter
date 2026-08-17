@@ -27,7 +27,10 @@ import {
   type BugReporterConfig,
   type BugReporterPolicy,
   type BugReportSubmissionResult,
+  type BugTrackingListOptions,
   type BugTrackingPage,
+  type BugTrackingQuery,
+  type BugTrackingSummary,
   type HandrailBugReporterClient,
   type ScreenshotAttachment,
   type TrackedBugRecord,
@@ -49,10 +52,13 @@ export type {
 export {
   APPLICATION_SESSION_TOKEN_HEADER,
   AUTOMATION_OPTIONS,
+  BUG_TRACKING_SORTS,
+  BUG_TRACKING_STATUS_GROUPS,
   BUG_REPORT_TOKEN_HEADER,
   BugReporterError,
   HandrailBugReporterClient,
   MAX_SCREENSHOT_BYTES,
+  MAX_BUG_HISTORY_SEARCH_CHARACTERS,
   REDACTED_VALUE,
   normalizeBugReporterEndpoints,
   redactSensitiveValues,
@@ -71,8 +77,12 @@ export type {
   BugReportSubmissionResult,
   BugTrackingListOptions,
   BugTrackingPage,
+  BugTrackingQuery,
+  BugTrackingSort,
   BugTrackingStage,
+  BugTrackingStatusGroup,
   BugTrackingStatusRollup,
+  BugTrackingSummary,
   BugReporterTransport,
   JsonObject,
   JsonPrimitive,
@@ -163,8 +173,15 @@ export interface BugReporterTrackingState {
   readonly bugs: readonly TrackedBugRecord[];
   readonly hasMore: boolean;
   readonly nextCursor: string | null;
+  readonly summary: BugTrackingSummary | null;
+  readonly query: BugTrackingQuery | null;
   readonly error: BugReporterError | null;
 }
+
+export type BugReporterTrackingQueryOptions = Pick<
+  BugTrackingListOptions,
+  "search" | "statusGroup" | "sort"
+>;
 
 export interface HandrailBugReporterContextValue {
   readonly reporter: HandrailBugReporterClient;
@@ -187,7 +204,9 @@ export interface HandrailBugReporterContextValue {
   readonly submission: BugReporterSubmissionState;
   resetSubmission(): void;
   readonly tracking: BugReporterTrackingState;
-  refreshBugs(): Promise<BugTrackingPage>;
+  refreshBugs(
+    options?: BugReporterTrackingQueryOptions,
+  ): Promise<BugTrackingPage>;
   loadMoreBugs(): Promise<BugTrackingPage | null>;
 }
 
@@ -211,6 +230,8 @@ const EMPTY_TRACKING: BugReporterTrackingState = Object.freeze({
   bugs: Object.freeze([]),
   hasMore: false,
   nextCursor: null,
+  summary: null,
+  query: null,
   error: null,
 });
 
@@ -410,17 +431,24 @@ export function HandrailBugReporterProvider({
     setSubmission(EMPTY_SUBMISSION);
   }, []);
 
-  const refreshBugs = useCallback(async () => {
+  const refreshBugs = useCallback(async (
+    options: BugReporterTrackingQueryOptions = {},
+  ) => {
     const generation = ++trackingGeneration.current;
     setTracking((current) => ({ ...current, status: "loading", error: null }));
     try {
-      const page = await reporter.listBugs({ limit: historyPageSize });
+      const page = await reporter.listBugs({
+        limit: historyPageSize,
+        ...options,
+      });
       if (generation === trackingGeneration.current) {
         setTracking({
           status: "ready",
           bugs: page.bugs,
           hasMore: page.pagination.has_more,
           nextCursor: page.pagination.next_cursor,
+          summary: page.summary,
+          query: page.query,
           error: null,
         });
       }
@@ -465,6 +493,8 @@ export function HandrailBugReporterProvider({
           ],
           hasMore: page.pagination.has_more,
           nextCursor: page.pagination.next_cursor,
+          summary: page.summary,
+          query: page.query,
           error: null,
         }));
       }

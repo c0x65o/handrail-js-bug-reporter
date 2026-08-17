@@ -30,10 +30,13 @@ export type {
 export {
   APPLICATION_SESSION_TOKEN_HEADER,
   AUTOMATION_OPTIONS,
+  BUG_TRACKING_SORTS,
+  BUG_TRACKING_STATUS_GROUPS,
   BUG_REPORT_TOKEN_HEADER,
   BugReporterError,
   HandrailBugReporterClient,
   MAX_SCREENSHOT_BYTES,
+  MAX_BUG_HISTORY_SEARCH_CHARACTERS,
   REDACTED_VALUE,
   normalizeBugReporterEndpoints,
   redactSensitiveValues,
@@ -52,8 +55,12 @@ export type {
   BugReportSubmissionResult,
   BugTrackingListOptions,
   BugTrackingPage,
+  BugTrackingQuery,
+  BugTrackingSort,
   BugTrackingStage,
+  BugTrackingStatusGroup,
   BugTrackingStatusRollup,
+  BugTrackingSummary,
   BugReporterTransport,
   JsonObject,
   JsonPrimitive,
@@ -392,10 +399,16 @@ export function createSameOriginBugReporterHandler<
       endpoint.searchParams.set("environment", environment!);
     }
     if (isHistory) {
-      const limit = incomingUrl.searchParams.get("limit");
-      const cursor = incomingUrl.searchParams.get("cursor");
-      if (limit) endpoint.searchParams.set("limit", limit);
-      if (cursor) endpoint.searchParams.set("cursor", cursor);
+      for (const key of [
+        "limit",
+        "cursor",
+        "search",
+        "status_group",
+        "sort",
+      ]) {
+        const value = incomingUrl.searchParams.get(key);
+        if (value) endpoint.searchParams.set(key, value);
+      }
     }
 
     let upstream: Response | null = null;

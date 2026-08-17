@@ -5,6 +5,19 @@ export const APPLICATION_SESSION_TOKEN_HEADER =
 export const BUG_REPORT_TOKEN_HEADER = "x-handrail-bug-report-token" as const;
 export const MAX_SCREENSHOT_BYTES = 20 * 1024 * 1024;
 export const REDACTED_VALUE = "[REDACTED]" as const;
+export const MAX_BUG_HISTORY_SEARCH_CHARACTERS = 200;
+
+export const BUG_TRACKING_STATUS_GROUPS = Object.freeze([
+  "needs_attention",
+  "in_progress",
+  "closed",
+  "not_reproduced",
+] as const);
+
+export const BUG_TRACKING_SORTS = Object.freeze([
+  "newest",
+  "oldest",
+] as const);
 
 export const AUTOMATION_OPTIONS = Object.freeze([
   Object.freeze({ key: "auto_verify", label: "Verify this issue" }),
@@ -157,6 +170,10 @@ export type BugTrackingStage =
   | "wont_fix"
   | "needs_attention";
 
+export type BugTrackingStatusGroup =
+  (typeof BUG_TRACKING_STATUS_GROUPS)[number];
+export type BugTrackingSort = (typeof BUG_TRACKING_SORTS)[number];
+
 export interface BugTrackingStatusRollup {
   readonly stage: BugTrackingStage;
   readonly label: string;
@@ -177,7 +194,13 @@ export interface TrackedBugRecord {
   readonly severity: string;
   readonly environment: string;
   readonly status: string;
+  /** Stable semantic group for app-owned filters and status styling. */
+  readonly status_group: BugTrackingStatusGroup;
   readonly status_rollup: BugTrackingStatusRollup;
+  /** Metadata from this reporter's latest submission for the canonical bug. */
+  readonly reported_app_version: string | null;
+  readonly reported_route: string | null;
+  readonly reported_app_flavor: string | null;
   /** Canonical occurrences across all reporters for a grouped crash. */
   readonly occurrence_count: number;
   /** Occurrences submitted by the current verified application user. */
@@ -190,11 +213,32 @@ export interface TrackedBugRecord {
   readonly closed_at: string | null;
 }
 
+export interface BugTrackingSummary {
+  /** All bugs matching the current search before status-group filtering. */
+  readonly total: number;
+  readonly needs_attention: number;
+  readonly in_progress: number;
+  readonly closed: number;
+  readonly not_reproduced: number;
+}
+
+export interface BugTrackingQuery {
+  readonly search: string | null;
+  readonly statusGroup: BugTrackingStatusGroup | null;
+  readonly sort: BugTrackingSort;
+}
+
 export interface BugTrackingPage {
   readonly contract_version: "v1";
   readonly bugs: readonly TrackedBugRecord[];
+  /** Null only when rolling against an older Handrail history endpoint. */
+  readonly summary: BugTrackingSummary | null;
+  /** The server-normalized discovery query, or null for an older endpoint. */
+  readonly query: BugTrackingQuery | null;
   readonly pagination: {
     readonly limit: number;
+    /** Matching search + status group count, or null for an older endpoint. */
+    readonly filtered_count: number | null;
     readonly has_more: boolean;
     readonly next_cursor: string | null;
   };
@@ -205,6 +249,11 @@ export interface BugTrackingListOptions {
   readonly limit?: number;
   /** Opaque keyset cursor returned by the previous page. */
   readonly cursor?: string;
+  /** Case-insensitive literal search over title, route, version, and flavor. */
+  readonly search?: string;
+  readonly statusGroup?: BugTrackingStatusGroup;
+  /** Defaults to newest reporter submission first. */
+  readonly sort?: BugTrackingSort;
   readonly signal?: AbortSignal;
 }
 
@@ -746,6 +795,10 @@ const BUG_TRACKING_STAGES = new Set<BugTrackingStage>([
   "wont_fix",
   "needs_attention",
 ]);
+const BUG_TRACKING_STATUS_GROUP_SET = new Set<BugTrackingStatusGroup>(
+  BUG_TRACKING_STATUS_GROUPS,
+);
+const BUG_TRACKING_SORT_SET = new Set<BugTrackingSort>(BUG_TRACKING_SORTS);
 
 function plainRecord(input: unknown): Record<string, unknown> | null {
   return input && typeof input === "object" && !Array.isArray(input)
@@ -760,6 +813,20 @@ function nullableString(input: unknown): string | null {
 function nonNegativeNumber(input: unknown, fallback: number): number {
   const value = Number(input);
   return Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+function nonNegativeInteger(input: unknown): number | null {
+  const value = Number(input);
+  return Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function statusGroupForRollup(
+  stage: BugTrackingStage,
+  terminal: boolean,
+): BugTrackingStatusGroup {
+  if (stage === "needs_attention") return "needs_attention";
+  if (stage === "not_reproduced") return "not_reproduced";
+  return terminal ? "closed" : "in_progress";
 }
 
 function trackedBugRecord(input: unknown): TrackedBugRecord | null {
@@ -780,12 +847,24 @@ function trackedBugRecord(input: unknown): TrackedBugRecord | null {
   ) {
     return null;
   }
+  const statusGroup = statusGroupForRollup(stage, rollup.terminal);
+  const providedStatusGroup = nullableString(record.status_group);
+  if (
+    providedStatusGroup
+    && (
+      !BUG_TRACKING_STATUS_GROUP_SET.has(
+        providedStatusGroup as BugTrackingStatusGroup,
+      )
+      || providedStatusGroup !== statusGroup
+    )
+  ) return null;
   return Object.freeze({
     id,
     title,
     severity,
     environment,
     status,
+    status_group: statusGroup,
     status_rollup: Object.freeze({
       stage,
       label,
@@ -797,6 +876,9 @@ function trackedBugRecord(input: unknown): TrackedBugRecord | null {
       version: nullableString(rollup.version),
       updated_at: nullableString(rollup.updated_at),
     }),
+    reported_app_version: nullableString(record.reported_app_version),
+    reported_route: nullableString(record.reported_route),
+    reported_app_flavor: nullableString(record.reported_app_flavor),
     occurrence_count: nonNegativeNumber(record.occurrence_count, 1),
     reporter_occurrence_count: nonNegativeNumber(
       record.reporter_occurrence_count,
@@ -808,6 +890,57 @@ function trackedBugRecord(input: unknown): TrackedBugRecord | null {
     updated_at: nullableString(record.updated_at),
     fixed_at: nullableString(record.fixed_at),
     closed_at: nullableString(record.closed_at),
+  });
+}
+
+function trackingSummary(input: unknown): BugTrackingSummary | null {
+  const record = plainRecord(input);
+  if (!record) return null;
+  const summary = {
+    total: nonNegativeInteger(record.total),
+    needs_attention: nonNegativeInteger(record.needs_attention),
+    in_progress: nonNegativeInteger(record.in_progress),
+    closed: nonNegativeInteger(record.closed),
+    not_reproduced: nonNegativeInteger(record.not_reproduced),
+  };
+  if (Object.values(summary).some((value) => value === null)) return null;
+  const complete = summary as BugTrackingSummary;
+  if (
+    complete.total !== complete.needs_attention
+      + complete.in_progress
+      + complete.closed
+      + complete.not_reproduced
+  ) return null;
+  return Object.freeze(complete);
+}
+
+function trackingQuery(input: unknown): BugTrackingQuery | null {
+  const record = plainRecord(input);
+  if (!record) return null;
+  const search = record.search === null ? null : nullableString(record.search);
+  if (
+    record.search !== null
+    && (
+      !search
+      || search.length > MAX_BUG_HISTORY_SEARCH_CHARACTERS
+    )
+  ) return null;
+  const rawStatusGroup = record.status_group === null
+    ? null
+    : nullableString(record.status_group);
+  if (
+    rawStatusGroup
+    && !BUG_TRACKING_STATUS_GROUP_SET.has(
+      rawStatusGroup as BugTrackingStatusGroup,
+    )
+  ) return null;
+  if (record.status_group !== null && !rawStatusGroup) return null;
+  const sort = nullableString(record.sort) as BugTrackingSort | null;
+  if (!sort || !BUG_TRACKING_SORT_SET.has(sort)) return null;
+  return Object.freeze({
+    search,
+    statusGroup: rawStatusGroup as BugTrackingStatusGroup | null,
+    sort,
   });
 }
 
@@ -827,11 +960,31 @@ function trackingPage(input: unknown): BugTrackingPage | null {
   if (!Number.isInteger(limit) || limit < 1 || limit > 50) return null;
   const nextCursor = nullableString(pagination.next_cursor);
   if (pagination.has_more && !nextCursor) return null;
+  const hasDiscovery = record.summary !== undefined || record.query !== undefined;
+  const summary = hasDiscovery ? trackingSummary(record.summary) : null;
+  const query = hasDiscovery ? trackingQuery(record.query) : null;
+  const filteredCount = pagination.filtered_count === undefined
+    ? null
+    : nonNegativeInteger(pagination.filtered_count);
+  if (
+    hasDiscovery
+    && (
+      !summary
+      || !query
+      || filteredCount === null
+      || filteredCount !== (
+        query.statusGroup ? summary[query.statusGroup] : summary.total
+      )
+    )
+  ) return null;
   return Object.freeze({
     contract_version: "v1",
     bugs: Object.freeze(bugs as TrackedBugRecord[]),
+    summary,
+    query,
     pagination: Object.freeze({
       limit,
+      filtered_count: filteredCount,
       has_more: pagination.has_more,
       next_cursor: nextCursor,
     }),
@@ -850,6 +1003,24 @@ function urlWithQuery(
     }
   }
   return relative ? `${url.pathname}${url.search}` : url.toString();
+}
+
+function invalidTrackingQuery(): BugReporterError {
+  return new BugReporterError(
+    "tracking_rejected",
+    "Bug history could not be loaded. Please try again.",
+  );
+}
+
+function normalizedTrackingSearch(input: unknown): string | null {
+  if (input === undefined || input === null || input === "") return null;
+  if (typeof input !== "string") throw invalidTrackingQuery();
+  const search = input.trim();
+  if (!search) return null;
+  if (search.length > MAX_BUG_HISTORY_SEARCH_CHARACTERS) {
+    throw invalidTrackingQuery();
+  }
+  return search;
 }
 
 export class HandrailBugReporterClient {
@@ -1124,11 +1295,23 @@ export class HandrailBugReporterClient {
         "Bug reporting is not configured.",
       );
     }
+    const search = normalizedTrackingSearch(options.search);
+    const statusGroup = options.statusGroup ?? null;
+    if (statusGroup && !BUG_TRACKING_STATUS_GROUP_SET.has(statusGroup)) {
+      throw invalidTrackingQuery();
+    }
+    const sort = options.sort ?? null;
+    if (sort && !BUG_TRACKING_SORT_SET.has(sort)) {
+      throw invalidTrackingQuery();
+    }
     const url = urlWithQuery(this.endpoints.history, {
       project_id: this.projectId,
       environment: this.environment,
       limit: options.limit,
       cursor: options.cursor,
+      search,
+      status_group: statusGroup,
+      sort,
     });
     const body = await this.trackingRequest(url, options.signal);
     const page = trackingPage(body);

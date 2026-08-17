@@ -5,6 +5,9 @@ import {
   stampReport as stampBrowserReport,
   type BugReporterPolicy,
   type BugTrackingPage,
+  type BugTrackingQuery,
+  type BugTrackingStatusGroup,
+  type BugTrackingSummary,
   type ReporterSdkIdentity,
   type TrackedBugRecord,
 } from "@handrail/bug-reporter";
@@ -100,10 +103,24 @@ const submissionPromise = reporter.submit(
 );
 void policyPromise;
 void submissionPromise;
-const bugPagePromise: Promise<BugTrackingPage> = reporter.listBugs({ limit: 10 });
+const statusGroup: BugTrackingStatusGroup = "needs_attention";
+const bugPagePromise: Promise<BugTrackingPage> = reporter.listBugs({
+  limit: 10,
+  search: "checkout",
+  statusGroup,
+  sort: "newest",
+});
 const trackedBugPromise: Promise<TrackedBugRecord> = reporter.getBug("bug-123");
+const queryPromise: Promise<BugTrackingQuery | null> = bugPagePromise.then(
+  (page) => page.query,
+);
+const summaryPromise: Promise<BugTrackingSummary | null> = bugPagePromise.then(
+  (page) => page.summary,
+);
 void bugPagePromise;
 void trackedBugPromise;
+void queryPromise;
+void summaryPromise;
 
 const rejection = new BugReporterError(
   "submission_rejected",

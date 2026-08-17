@@ -202,7 +202,7 @@ test("same-origin forwarding scopes paged bug history and lookup to server-owned
   }));
 
   const history = await handler(new Request(
-    "https://app.example/api/mobile-bug-reports/mine?limit=25&cursor=opaque&project_id=attacker&environment=production&unexpected=ignored",
+    "https://app.example/api/mobile-bug-reports/mine?limit=25&cursor=opaque&search=insurance&status_group=needs_attention&sort=oldest&project_id=attacker&environment=production&unexpected=ignored",
   ));
   assert.equal(history.status, 200);
   assert.equal(history.headers.get("cache-control"), "private, no-store");
@@ -217,6 +217,12 @@ test("same-origin forwarding scopes paged bug history and lookup to server-owned
   assert.equal(historyUrl.searchParams.get("environment"), "staging");
   assert.equal(historyUrl.searchParams.get("limit"), "25");
   assert.equal(historyUrl.searchParams.get("cursor"), "opaque");
+  assert.equal(historyUrl.searchParams.get("search"), "insurance");
+  assert.equal(
+    historyUrl.searchParams.get("status_group"),
+    "needs_attention",
+  );
+  assert.equal(historyUrl.searchParams.get("sort"), "oldest");
   assert.equal(historyUrl.searchParams.has("unexpected"), false);
   assert.equal(
     upstreamRequests[0].init.headers[APPLICATION_SESSION_TOKEN_HEADER],

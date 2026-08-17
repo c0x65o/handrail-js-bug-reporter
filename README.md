@@ -261,11 +261,55 @@ if (firstPage.pagination.has_more) {
 }
 ```
 
-History is newest-first and uses opaque keyset cursors rather than offsets. The
-default page size is 20 and Handrail caps pages at 50, so applications should
-render the first page and load more only on demand. Repeated crash occurrences
-collapse to one canonical bug; `occurrence_count` is the global canonical count
-and `reporter_occurrence_count` is the current user's count.
+History defaults to newest-first and uses opaque keyset cursors rather than
+offsets. The default page size is 20 and Handrail caps pages at 50, so
+applications should render the first page and continue only on demand. Repeated
+crash occurrences collapse to one canonical bug; `occurrence_count` is the
+global canonical count and `reporter_occurrence_count` is the current user's
+count.
+
+App-owned history screens can request a bounded literal search, one semantic
+status group, and oldest/newest ordering:
+
+```ts
+const page = await reporter.listBugs({
+  limit: 10,
+  search: "insurance",
+  statusGroup: "needs_attention",
+  sort: "newest",
+});
+
+console.log(page.summary);
+// { total, needs_attention, in_progress, closed, not_reproduced }
+
+for (const bug of page.bugs) {
+  console.log(
+    bug.status_group,
+    bug.reported_app_version,
+    bug.reported_route,
+    bug.reported_app_flavor,
+  );
+}
+```
+
+`summary` counts all bugs matching the current search before status-group
+filtering. `pagination.filtered_count` counts the search plus the selected
+group. Both are `null` only during a rolling deployment against an older
+Handrail history endpoint. Search is a case-insensitive literal substring over
+title and the current reporter's latest route, app version, and app flavor; it
+is limited to 200 characters.
+
+The four status groups partition the canonical rollups. `needs_attention` and
+`not_reproduced` retain their corresponding stages, terminal rollups are
+`closed`, and every other nonterminal stage is `in_progress`. Use
+`status_group` for filters instead of reclassifying raw status or workflow
+fields in application code.
+
+The opaque cursor carries the normalized search, group, sort, and snapshot.
+Continuation calls may send only `cursor` (plus `limit`) or repeat the same
+query. Conflicting query values are rejected. A UI may number sequential cursor
+pages it has already visited, but it should not promise random page access or
+synthesize offset pagination.
 
 `status_rollup.stage` is one of `submitted`, `verifying`, `verified`, `fixing`,
 `fixed`, `deployed`, `closed`, `not_reproduced`, `wont_fix`, or
@@ -279,8 +323,11 @@ retain the canonical identity and later pass it to `getBug`.
 
 ### Headless React adoption
 
-The React entry point owns state but renders no UI. Keep its configuration
-object stable so the provider represents one reporter instance:
+The React entry point owns state but renders no UI, injects no global widget,
+and ships no shared CSS. The host application owns its modal/page/drawer,
+launcher, theme, components, copy, responsive behavior, and accessibility.
+Keep the configuration object stable so the provider represents one reporter
+instance:
 
 ```tsx
 import { useMemo } from "react";
@@ -298,7 +345,7 @@ function BugReportForm() {
   // bugReport.setAutomationRequest
   // bugReport.replaceScreenshot / removeScreenshot / canAttachScreenshot
   // bugReport.submission / submit / resetSubmission
-  // bugReport.tracking / refreshBugs / loadMoreBugs
+  // bugReport.tracking / refreshBugs({ search, statusGroup, sort }) / loadMoreBugs
   return null;
 }
 
@@ -331,6 +378,16 @@ cookies, local storage, session storage, analytics, or background persistence.
 Bug history is also opt-in: call `refreshBugs` when the application opens its
 “My bugs” surface, then call `loadMoreBugs` while `tracking.hasMore` is true.
 Set `historyPageSize` on the provider to request a page size from 1 through 50.
+The tracking state exposes the server-normalized `summary` and `query` together
+with the current rows and continuation cursor.
+
+The host should provide its own loading, empty, error/retry, pending, success,
+and validation states. If the reporter is presented as a dialog, the host also
+owns its accessible name, focus containment, Escape/close behavior, and focus
+restoration. Status and submission changes should be announced without relying
+on color alone. These are presentation requirements, not SDK-rendered UI, so
+each product can follow its existing design system.
+
 For fixed bugs, Handrail reports deployment by comparing the Work Request's
 fixed application version with the current environment version. Equal and later
 versions include the fix; missing or non-comparable version evidence is reported

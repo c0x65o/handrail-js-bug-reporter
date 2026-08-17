@@ -216,8 +216,21 @@ test("headless React refreshes and appends bounded bug history pages", async () 
         bugs: secondPage
           ? [trackedBug("bug-2", "fixing")]
           : [trackedBug("bug-1")],
+        summary: {
+          total: 2,
+          needs_attention: 0,
+          in_progress: 2,
+          closed: 0,
+          not_reproduced: 0,
+        },
+        query: {
+          search: "checkout",
+          status_group: "in_progress",
+          sort: "newest",
+        },
         pagination: {
           limit: 1,
+          filtered_count: 2,
           has_more: !secondPage,
           next_cursor: secondPage ? null : "page-2",
         },
@@ -239,11 +252,21 @@ test("headless React refreshes and appends bounded bug history pages", async () 
   assert.equal(value.tracking.status, "idle");
 
   await act(async () => {
-    await value.refreshBugs();
+    await value.refreshBugs({
+      search: "checkout",
+      statusGroup: "in_progress",
+      sort: "newest",
+    });
   });
   assert.equal(value.tracking.status, "ready");
   assert.deepEqual(value.tracking.bugs.map((bug) => bug.id), ["bug-1"]);
   assert.equal(value.tracking.hasMore, true);
+  assert.equal(value.tracking.summary.total, 2);
+  assert.deepEqual(value.tracking.query, {
+    search: "checkout",
+    statusGroup: "in_progress",
+    sort: "newest",
+  });
 
   await act(async () => {
     await value.loadMoreBugs();
@@ -254,6 +277,9 @@ test("headless React refreshes and appends bounded bug history pages", async () 
   );
   assert.equal(value.tracking.hasMore, false);
   assert.match(historyUrls[0], /limit=1/);
+  assert.match(historyUrls[0], /search=checkout/);
+  assert.match(historyUrls[0], /status_group=in_progress/);
+  assert.match(historyUrls[0], /sort=newest/);
   assert.match(historyUrls[1], /cursor=page-2/);
 
   await act(async () => renderer.unmount());

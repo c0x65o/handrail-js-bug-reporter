@@ -408,9 +408,27 @@ test("verified reporters page and look up their bugs with fresh session headers"
       if (String(url).includes("/mine")) {
         return jsonResponse({
           contract_version: "v1",
-          bugs: [trackedBug()],
+          bugs: [trackedBug({
+            status_group: "in_progress",
+            reported_app_version: "2.24.1",
+            reported_route: "/checkout",
+            reported_app_flavor: "web",
+          })],
+          summary: {
+            total: 3,
+            needs_attention: 1,
+            in_progress: 2,
+            closed: 0,
+            not_reproduced: 0,
+          },
+          query: {
+            search: "checkout",
+            status_group: "in_progress",
+            sort: "oldest",
+          },
           pagination: {
             limit: 10,
+            filtered_count: 2,
             has_more: true,
             next_cursor: "opaque-page-2",
           },
@@ -432,9 +450,26 @@ test("verified reporters page and look up their bugs with fresh session headers"
     },
   }));
 
-  const page = await reporter.listBugs({ limit: 10, cursor: "opaque-page-1" });
+  const page = await reporter.listBugs({
+    limit: 10,
+    cursor: "opaque-page-1",
+    search: "  checkout  ",
+    statusGroup: "in_progress",
+    sort: "oldest",
+  });
   assert.equal(page.bugs[0].status_rollup.stage, "fixing");
+  assert.equal(page.bugs[0].status_group, "in_progress");
+  assert.equal(page.bugs[0].reported_app_version, "2.24.1");
+  assert.equal(page.bugs[0].reported_route, "/checkout");
   assert.equal(page.bugs[0].reporter_occurrence_count, 2);
+  assert.equal(page.summary.total, 3);
+  assert.equal(page.summary.needs_attention, 1);
+  assert.deepEqual(page.query, {
+    search: "checkout",
+    statusGroup: "in_progress",
+    sort: "oldest",
+  });
+  assert.equal(page.pagination.filtered_count, 2);
   assert.equal(page.pagination.next_cursor, "opaque-page-2");
   const current = await reporter.getBug("bug/123");
   assert.equal(current.status_rollup.stage, "fixed");
@@ -445,6 +480,9 @@ test("verified reporters page and look up their bugs with fresh session headers"
   assert.match(calls[0].url, /environment=staging/);
   assert.match(calls[0].url, /limit=10/);
   assert.match(calls[0].url, /cursor=opaque-page-1/);
+  assert.match(calls[0].url, /search=checkout/);
+  assert.match(calls[0].url, /status_group=in_progress/);
+  assert.match(calls[0].url, /sort=oldest/);
   assert.match(calls[1].url, /\/bugs\/bug%2F123\?/);
   assert.deepEqual(
     calls.map((call) => call.init.headers[APPLICATION_SESSION_TOKEN_HEADER]),
@@ -478,6 +516,27 @@ test("bug tracking rejects malformed pages and preserves bounded upstream diagno
       && error.upstreamCode === "bug_history_identity_required"
       && !error.message.includes("history-secret"),
   );
+});
+
+test("bug tracking rejects invalid discovery queries before making a request", async () => {
+  let requestCount = 0;
+  const reporter = createBugReporter(reporterConfig({
+    fetch: async () => {
+      requestCount += 1;
+      return jsonResponse({});
+    },
+  }));
+  await assert.rejects(
+    reporter.listBugs({ search: "x".repeat(201) }),
+    (error) => error instanceof BugReporterError
+      && error.code === "tracking_rejected",
+  );
+  await assert.rejects(
+    reporter.listBugs({ statusGroup: "unsafe" }),
+    (error) => error instanceof BugReporterError
+      && error.code === "tracking_rejected",
+  );
+  assert.equal(requestCount, 0);
 });
 
 test("submission without a current session degrades to vanilla automation", async () => {
