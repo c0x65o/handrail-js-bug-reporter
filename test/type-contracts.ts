@@ -4,10 +4,13 @@ import {
   createBugReporter,
   stampReport as stampBrowserReport,
   type BugReporterPolicy,
+  type BugArchiveClosedResult,
+  type BugArchiveResult,
   type BugTrackingPage,
   type BugTrackingQuery,
   type BugTrackingStatusGroup,
   type BugTrackingSummary,
+  type BugTrackingVisibility,
   type ReporterSdkIdentity,
   type TrackedBugRecord,
 } from "@handrail/bug-reporter";
@@ -104,13 +107,19 @@ const submissionPromise = reporter.submit(
 void policyPromise;
 void submissionPromise;
 const statusGroup: BugTrackingStatusGroup = "needs_attention";
+const visibility: BugTrackingVisibility = "active";
 const bugPagePromise: Promise<BugTrackingPage> = reporter.listBugs({
   limit: 10,
   search: "checkout",
   statusGroup,
   sort: "newest",
+  visibility,
 });
 const trackedBugPromise: Promise<TrackedBugRecord> = reporter.getBug("bug-123");
+const archivePromise: Promise<BugArchiveResult> = reporter.archiveBug("bug-123");
+const restorePromise: Promise<BugArchiveResult> = reporter.restoreBug("bug-123");
+const archiveClosedPromise: Promise<BugArchiveClosedResult> =
+  reporter.archiveClosedBugs();
 const queryPromise: Promise<BugTrackingQuery | null> = bugPagePromise.then(
   (page) => page.query,
 );
@@ -119,6 +128,9 @@ const summaryPromise: Promise<BugTrackingSummary | null> = bugPagePromise.then(
 );
 void bugPagePromise;
 void trackedBugPromise;
+void archivePromise;
+void restorePromise;
+void archiveClosedPromise;
 void queryPromise;
 void summaryPromise;
 

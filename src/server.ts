@@ -32,6 +32,7 @@ export {
   AUTOMATION_OPTIONS,
   BUG_TRACKING_SORTS,
   BUG_TRACKING_STATUS_GROUPS,
+  BUG_TRACKING_VISIBILITIES,
   BUG_REPORT_TOKEN_HEADER,
   BugReporterError,
   HandrailBugReporterClient,
@@ -44,6 +45,8 @@ export {
 export type {
   AutomationOption,
   AutomationOptionKey,
+  BugArchiveClosedResult,
+  BugArchiveResult,
   BugReportInput,
   BugReporterConfig,
   BugReporterConfigurationSnapshot,
@@ -61,6 +64,7 @@ export type {
   BugTrackingStatusGroup,
   BugTrackingStatusRollup,
   BugTrackingSummary,
+  BugTrackingVisibility,
   BugReporterTransport,
   JsonObject,
   JsonPrimitive,
@@ -342,11 +346,26 @@ export function createSameOriginBugReporterHandler<
     const isLookup = request.method === "GET"
       && pathParts.length === 2
       && pathParts[0] === "bugs";
+    const isArchive = ["PUT", "DELETE"].includes(request.method)
+      && pathParts.length === 3
+      && pathParts[0] === "bugs"
+      && pathParts[2] === "archive";
+    const isArchiveClosed = request.method === "POST"
+      && pathParts.length === 2
+      && pathParts[0] === "mine"
+      && pathParts[1] === "archive-closed";
     const isSubmission = request.method === "POST" && pathParts.length === 0;
-    if (!isPolicy && !isHistory && !isLookup && !isSubmission) {
+    if (
+      !isPolicy
+      && !isHistory
+      && !isLookup
+      && !isArchive
+      && !isArchiveClosed
+      && !isSubmission
+    ) {
       return new Response(null, {
         status: 405,
-        headers: { allow: "GET, POST" },
+        headers: { allow: "GET, POST, PUT, DELETE" },
       });
     }
 
@@ -384,7 +403,7 @@ export function createSameOriginBugReporterHandler<
     let endpoint: URL;
     if (isPolicy) endpoint = new URL(endpoints!.policy);
     else if (isHistory) endpoint = new URL(endpoints!.history);
-    else if (isLookup) {
+    else if (isLookup || isArchive) {
       let bugId: string;
       try {
         bugId = decodeURIComponent(pathParts[1]).trim();
@@ -392,9 +411,13 @@ export function createSameOriginBugReporterHandler<
         bugId = "";
       }
       if (!bugId) return forwardingJson(404, "bug_history_not_found");
-      endpoint = new URL(`${endpoints!.bugs}/${encodeURIComponent(bugId)}`);
+      endpoint = new URL(
+        `${endpoints!.bugs}/${encodeURIComponent(bugId)}${isArchive ? "/archive" : ""}`,
+      );
+    } else if (isArchiveClosed) {
+      endpoint = new URL(`${endpoints!.history}/archive-closed`);
     } else endpoint = new URL(endpoints!.reports);
-    if (isPolicy || isHistory || isLookup) {
+    if (isPolicy || isHistory || isLookup || isArchive || isArchiveClosed) {
       endpoint.searchParams.set("project_id", projectId!);
       endpoint.searchParams.set("environment", environment!);
     }
@@ -405,6 +428,7 @@ export function createSameOriginBugReporterHandler<
         "search",
         "status_group",
         "sort",
+        "visibility",
       ]) {
         const value = incomingUrl.searchParams.get(key);
         if (value) endpoint.searchParams.set(key, value);
@@ -434,7 +458,11 @@ export function createSameOriginBugReporterHandler<
       }
       try {
         upstream = await fetchImpl(endpoint, {
-          method: isSubmission ? "POST" : "GET",
+          method: isSubmission
+            ? "POST"
+            : isArchive || isArchiveClosed
+              ? request.method
+              : "GET",
           headers,
           body: isSubmission
             ? applicationSessionToken

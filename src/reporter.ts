@@ -19,6 +19,12 @@ export const BUG_TRACKING_SORTS = Object.freeze([
   "oldest",
 ] as const);
 
+export const BUG_TRACKING_VISIBILITIES = Object.freeze([
+  "active",
+  "archived",
+  "all",
+] as const);
+
 export const AUTOMATION_OPTIONS = Object.freeze([
   Object.freeze({ key: "auto_verify", label: "Verify this issue" }),
   Object.freeze({
@@ -173,6 +179,8 @@ export type BugTrackingStage =
 export type BugTrackingStatusGroup =
   (typeof BUG_TRACKING_STATUS_GROUPS)[number];
 export type BugTrackingSort = (typeof BUG_TRACKING_SORTS)[number];
+export type BugTrackingVisibility =
+  (typeof BUG_TRACKING_VISIBILITIES)[number];
 
 export interface BugTrackingStatusRollup {
   readonly stage: BugTrackingStage;
@@ -201,6 +209,9 @@ export interface TrackedBugRecord {
   readonly reported_app_version: string | null;
   readonly reported_route: string | null;
   readonly reported_app_flavor: string | null;
+  /** Reporter-owned presentation state; it never changes the Handrail PM bug. */
+  readonly archived: boolean;
+  readonly archived_at: string | null;
   /** Canonical occurrences across all reporters for a grouped crash. */
   readonly occurrence_count: number;
   /** Occurrences submitted by the current verified application user. */
@@ -226,6 +237,7 @@ export interface BugTrackingQuery {
   readonly search: string | null;
   readonly statusGroup: BugTrackingStatusGroup | null;
   readonly sort: BugTrackingSort;
+  readonly visibility: BugTrackingVisibility;
 }
 
 export interface BugTrackingPage {
@@ -254,7 +266,21 @@ export interface BugTrackingListOptions {
   readonly statusGroup?: BugTrackingStatusGroup;
   /** Defaults to newest reporter submission first. */
   readonly sort?: BugTrackingSort;
+  /** Defaults to active; archived recurrences automatically become active. */
+  readonly visibility?: BugTrackingVisibility;
   readonly signal?: AbortSignal;
+}
+
+export interface BugArchiveResult {
+  readonly contract_version: "v1";
+  readonly bugId: string;
+  readonly archived: boolean;
+  readonly archivedAt: string | null;
+}
+
+export interface BugArchiveClosedResult {
+  readonly contract_version: "v1";
+  readonly archivedCount: number;
 }
 
 export type BugReportSubmissionResult =
@@ -799,6 +825,9 @@ const BUG_TRACKING_STATUS_GROUP_SET = new Set<BugTrackingStatusGroup>(
   BUG_TRACKING_STATUS_GROUPS,
 );
 const BUG_TRACKING_SORT_SET = new Set<BugTrackingSort>(BUG_TRACKING_SORTS);
+const BUG_TRACKING_VISIBILITY_SET = new Set<BugTrackingVisibility>(
+  BUG_TRACKING_VISIBILITIES,
+);
 
 function plainRecord(input: unknown): Record<string, unknown> | null {
   return input && typeof input === "object" && !Array.isArray(input)
@@ -858,6 +887,13 @@ function trackedBugRecord(input: unknown): TrackedBugRecord | null {
       || providedStatusGroup !== statusGroup
     )
   ) return null;
+  if (
+    record.archived !== undefined
+    && typeof record.archived !== "boolean"
+  ) return null;
+  const archived = record.archived === true;
+  const archivedAt = nullableString(record.archived_at);
+  if ((archived && !archivedAt) || (!archived && archivedAt)) return null;
   return Object.freeze({
     id,
     title,
@@ -879,6 +915,8 @@ function trackedBugRecord(input: unknown): TrackedBugRecord | null {
     reported_app_version: nullableString(record.reported_app_version),
     reported_route: nullableString(record.reported_route),
     reported_app_flavor: nullableString(record.reported_app_flavor),
+    archived,
+    archived_at: archivedAt,
     occurrence_count: nonNegativeNumber(record.occurrence_count, 1),
     reporter_occurrence_count: nonNegativeNumber(
       record.reporter_occurrence_count,
@@ -937,10 +975,15 @@ function trackingQuery(input: unknown): BugTrackingQuery | null {
   if (record.status_group !== null && !rawStatusGroup) return null;
   const sort = nullableString(record.sort) as BugTrackingSort | null;
   if (!sort || !BUG_TRACKING_SORT_SET.has(sort)) return null;
+  const visibility = record.visibility === undefined
+    ? "active"
+    : nullableString(record.visibility) as BugTrackingVisibility | null;
+  if (!visibility || !BUG_TRACKING_VISIBILITY_SET.has(visibility)) return null;
   return Object.freeze({
     search,
     statusGroup: rawStatusGroup as BugTrackingStatusGroup | null,
     sort,
+    visibility,
   });
 }
 
@@ -988,6 +1031,36 @@ function trackingPage(input: unknown): BugTrackingPage | null {
       has_more: pagination.has_more,
       next_cursor: nextCursor,
     }),
+  });
+}
+
+function bugArchiveResult(input: unknown): BugArchiveResult | null {
+  const record = plainRecord(input);
+  const bugId = nullableString(record?.bug_id);
+  if (
+    record?.contract_version !== "v1"
+    || !bugId
+    || typeof record.archived !== "boolean"
+  ) return null;
+  const archivedAt = nullableString(record.archived_at);
+  if ((record.archived && !archivedAt) || (!record.archived && archivedAt)) {
+    return null;
+  }
+  return Object.freeze({
+    contract_version: "v1",
+    bugId,
+    archived: record.archived,
+    archivedAt,
+  });
+}
+
+function bugArchiveClosedResult(input: unknown): BugArchiveClosedResult | null {
+  const record = plainRecord(input);
+  const archivedCount = nonNegativeInteger(record?.archived_count);
+  if (record?.contract_version !== "v1" || archivedCount === null) return null;
+  return Object.freeze({
+    contract_version: "v1",
+    archivedCount,
   });
 }
 
@@ -1304,6 +1377,10 @@ export class HandrailBugReporterClient {
     if (sort && !BUG_TRACKING_SORT_SET.has(sort)) {
       throw invalidTrackingQuery();
     }
+    const visibility = options.visibility ?? null;
+    if (visibility && !BUG_TRACKING_VISIBILITY_SET.has(visibility)) {
+      throw invalidTrackingQuery();
+    }
     const url = urlWithQuery(this.endpoints.history, {
       project_id: this.projectId,
       environment: this.environment,
@@ -1312,6 +1389,7 @@ export class HandrailBugReporterClient {
       search,
       status_group: statusGroup,
       sort,
+      visibility,
     });
     const body = await this.trackingRequest(url, options.signal);
     const page = trackingPage(body);
@@ -1362,9 +1440,88 @@ export class HandrailBugReporterClient {
     return bug;
   }
 
+  /** Archive one owned bug without changing or deleting its Handrail PM record. */
+  async archiveBug(
+    bugId: string,
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<BugArchiveResult> {
+    return this.changeBugArchiveState(bugId, true, options.signal);
+  }
+
+  /** Restore one reporter-owned archived bug to active history. */
+  async restoreBug(
+    bugId: string,
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<BugArchiveResult> {
+    return this.changeBugArchiveState(bugId, false, options.signal);
+  }
+
+  /** Archive every currently closed bug owned by the verified reporter. */
+  async archiveClosedBugs(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<BugArchiveClosedResult> {
+    if (this.configuration.status !== "ready" || !this.endpoints) {
+      throw new BugReporterError(
+        "invalid_configuration",
+        "Bug reporting is not configured.",
+      );
+    }
+    const url = urlWithQuery(`${this.endpoints.history}/archive-closed`, {
+      project_id: this.projectId,
+      environment: this.environment,
+    });
+    const result = bugArchiveClosedResult(
+      await this.trackingRequest(url, options.signal, "POST"),
+    );
+    if (!result) {
+      throw new BugReporterError(
+        "tracking_rejected",
+        "Bug history returned an invalid response.",
+      );
+    }
+    return result;
+  }
+
+  private async changeBugArchiveState(
+    bugId: string,
+    archived: boolean,
+    signal?: AbortSignal,
+  ): Promise<BugArchiveResult> {
+    if (this.configuration.status !== "ready" || !this.endpoints) {
+      throw new BugReporterError(
+        "invalid_configuration",
+        "Bug reporting is not configured.",
+      );
+    }
+    const normalizedBugId = cleanString(bugId);
+    if (!normalizedBugId) throw invalidTrackingQuery();
+    const url = urlWithQuery(
+      `${this.endpoints.bugs}/${encodeURIComponent(normalizedBugId)}/archive`,
+      {
+        project_id: this.projectId,
+        environment: this.environment,
+      },
+    );
+    const result = bugArchiveResult(
+      await this.trackingRequest(
+        url,
+        signal,
+        archived ? "PUT" : "DELETE",
+      ),
+    );
+    if (!result || result.bugId !== normalizedBugId || result.archived !== archived) {
+      throw new BugReporterError(
+        "tracking_rejected",
+        "Bug history returned an invalid response.",
+      );
+    }
+    return result;
+  }
+
   private async trackingRequest(
     url: string,
     signal?: AbortSignal,
+    method: "GET" | "POST" | "PUT" | "DELETE" = "GET",
   ): Promise<unknown> {
     if (this.configuration.status !== "ready" || !url) {
       throw new BugReporterError(
@@ -1373,7 +1530,7 @@ export class HandrailBugReporterClient {
       );
     }
     const request = await this.requestWithRetries(url, {
-      method: "GET",
+      method,
       signal,
     });
     if (!request.response) {
@@ -1546,7 +1703,7 @@ export class HandrailBugReporterClient {
   private async requestWithRetries(
     url: string,
     input: {
-      readonly method: "GET" | "POST";
+      readonly method: "GET" | "POST" | "PUT" | "DELETE";
       readonly signal?: AbortSignal;
       readonly vanillaBody?: string;
       readonly automationBody?: string | null;

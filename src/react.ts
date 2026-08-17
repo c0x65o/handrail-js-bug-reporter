@@ -23,6 +23,8 @@ import {
   createHandrailBugReporter,
   type AutomationOption,
   type AutomationOptionKey,
+  type BugArchiveClosedResult,
+  type BugArchiveResult,
   type BugReportInput,
   type BugReporterConfig,
   type BugReporterPolicy,
@@ -54,6 +56,7 @@ export {
   AUTOMATION_OPTIONS,
   BUG_TRACKING_SORTS,
   BUG_TRACKING_STATUS_GROUPS,
+  BUG_TRACKING_VISIBILITIES,
   BUG_REPORT_TOKEN_HEADER,
   BugReporterError,
   HandrailBugReporterClient,
@@ -66,6 +69,8 @@ export {
 export type {
   AutomationOption,
   AutomationOptionKey,
+  BugArchiveClosedResult,
+  BugArchiveResult,
   BugReportInput,
   BugReporterConfig,
   BugReporterConfigurationSnapshot,
@@ -83,6 +88,7 @@ export type {
   BugTrackingStatusGroup,
   BugTrackingStatusRollup,
   BugTrackingSummary,
+  BugTrackingVisibility,
   BugReporterTransport,
   JsonObject,
   JsonPrimitive,
@@ -180,7 +186,7 @@ export interface BugReporterTrackingState {
 
 export type BugReporterTrackingQueryOptions = Pick<
   BugTrackingListOptions,
-  "search" | "statusGroup" | "sort"
+  "search" | "statusGroup" | "sort" | "visibility"
 >;
 
 export interface HandrailBugReporterContextValue {
@@ -208,6 +214,9 @@ export interface HandrailBugReporterContextValue {
     options?: BugReporterTrackingQueryOptions,
   ): Promise<BugTrackingPage>;
   loadMoreBugs(): Promise<BugTrackingPage | null>;
+  archiveBug(bugId: string): Promise<BugArchiveResult>;
+  restoreBug(bugId: string): Promise<BugArchiveResult>;
+  archiveClosedBugs(): Promise<BugArchiveClosedResult>;
 }
 
 export interface HandrailBugReporterProviderProps extends PropsWithChildren {
@@ -517,6 +526,34 @@ export function HandrailBugReporterProvider({
     }
   }, [historyPageSize, reporter, tracking.hasMore, tracking.nextCursor, tracking.status]);
 
+  const refreshCurrentBugQuery = useCallback(async () => {
+    const query = tracking.query;
+    return refreshBugs(query ? {
+      search: query.search || undefined,
+      statusGroup: query.statusGroup || undefined,
+      sort: query.sort,
+      visibility: query.visibility,
+    } : {});
+  }, [refreshBugs, tracking.query]);
+
+  const archiveBug = useCallback(async (bugId: string) => {
+    const result = await reporter.archiveBug(bugId);
+    await refreshCurrentBugQuery();
+    return result;
+  }, [refreshCurrentBugQuery, reporter]);
+
+  const restoreBug = useCallback(async (bugId: string) => {
+    const result = await reporter.restoreBug(bugId);
+    await refreshCurrentBugQuery();
+    return result;
+  }, [refreshCurrentBugQuery, reporter]);
+
+  const archiveClosedBugs = useCallback(async () => {
+    const result = await reporter.archiveClosedBugs();
+    await refreshCurrentBugQuery();
+    return result;
+  }, [refreshCurrentBugQuery, reporter]);
+
   const value = useMemo<HandrailBugReporterContextValue>(
     () => ({
       reporter,
@@ -538,9 +575,14 @@ export function HandrailBugReporterProvider({
       tracking,
       refreshBugs,
       loadMoreBugs,
+      archiveBug,
+      restoreBug,
+      archiveClosedBugs,
     }),
     [
       form,
+      archiveBug,
+      archiveClosedBugs,
       policy,
       policyStatus,
       refreshPolicy,
@@ -550,6 +592,7 @@ export function HandrailBugReporterProvider({
       replaceScreenshot,
       reporter,
       resetSubmission,
+      restoreBug,
       setAutomationRequest,
       submission,
       submit,

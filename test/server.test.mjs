@@ -202,7 +202,7 @@ test("same-origin forwarding scopes paged bug history and lookup to server-owned
   }));
 
   const history = await handler(new Request(
-    "https://app.example/api/mobile-bug-reports/mine?limit=25&cursor=opaque&search=insurance&status_group=needs_attention&sort=oldest&project_id=attacker&environment=production&unexpected=ignored",
+    "https://app.example/api/mobile-bug-reports/mine?limit=25&cursor=opaque&search=insurance&status_group=needs_attention&sort=oldest&visibility=archived&project_id=attacker&environment=production&unexpected=ignored",
   ));
   assert.equal(history.status, 200);
   assert.equal(history.headers.get("cache-control"), "private, no-store");
@@ -223,6 +223,7 @@ test("same-origin forwarding scopes paged bug history and lookup to server-owned
     "needs_attention",
   );
   assert.equal(historyUrl.searchParams.get("sort"), "oldest");
+  assert.equal(historyUrl.searchParams.get("visibility"), "archived");
   assert.equal(historyUrl.searchParams.has("unexpected"), false);
   assert.equal(
     upstreamRequests[0].init.headers[APPLICATION_SESSION_TOKEN_HEADER],
@@ -237,6 +238,45 @@ test("same-origin forwarding scopes paged bug history and lookup to server-owned
   ));
   assert.equal(crossSite.status, 403);
   assert.equal(upstreamRequests.length, 2);
+});
+
+test("same-origin forwarding scopes archive, restore, and clear-closed mutations", async () => {
+  const upstreamRequests = [];
+  const handler = createSameOriginBugReporterHandler(sharedConfig({
+    resolveApplicationSessionToken: () => "server-history-session",
+    fetch: async (url, init) => {
+      upstreamRequests.push({ url: String(url), init });
+      return jsonResponse({ ok: true });
+    },
+  }));
+
+  for (const [path, method] of [
+    ["/api/mobile-bug-reports/bugs/bug%2F1/archive", "PUT"],
+    ["/api/mobile-bug-reports/bugs/bug%2F1/archive", "DELETE"],
+    ["/api/mobile-bug-reports/mine/archive-closed", "POST"],
+  ]) {
+    const response = await handler(new Request(`https://app.example${path}`, {
+      method,
+    }));
+    assert.equal(response.status, 200);
+  }
+
+  assert.deepEqual(
+    upstreamRequests.map((request) => request.init.method),
+    ["PUT", "DELETE", "POST"],
+  );
+  assert.match(upstreamRequests[0].url, /\/bugs\/bug%2F1\/archive\?/);
+  assert.match(upstreamRequests[2].url, /\/mine\/archive-closed\?/);
+  for (const request of upstreamRequests) {
+    const url = new URL(request.url);
+    assert.equal(url.searchParams.get("project_id"), "project-123");
+    assert.equal(url.searchParams.get("environment"), "staging");
+    assert.equal(
+      request.init.headers[APPLICATION_SESSION_TOKEN_HEADER],
+      "server-history-session",
+    );
+    assert.equal(request.init.body, undefined);
+  }
 });
 
 test("same-origin browser mode rejects browser-held secrets and preserves core payload behavior", async () => {

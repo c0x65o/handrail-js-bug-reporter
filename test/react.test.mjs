@@ -56,6 +56,8 @@ function trackedBug(id, stage = "submitted") {
       version: null,
       updated_at: "2026-08-13T18:00:00.000Z",
     },
+    archived: false,
+    archived_at: null,
     occurrence_count: 1,
     reporter_occurrence_count: 1,
     first_reported_at: "2026-08-13T18:00:00.000Z",
@@ -227,6 +229,7 @@ test("headless React refreshes and appends bounded bug history pages", async () 
           search: "checkout",
           status_group: "in_progress",
           sort: "newest",
+          visibility: "active",
         },
         pagination: {
           limit: 1,
@@ -256,6 +259,7 @@ test("headless React refreshes and appends bounded bug history pages", async () 
       search: "checkout",
       statusGroup: "in_progress",
       sort: "newest",
+      visibility: "active",
     });
   });
   assert.equal(value.tracking.status, "ready");
@@ -266,6 +270,7 @@ test("headless React refreshes and appends bounded bug history pages", async () 
     search: "checkout",
     statusGroup: "in_progress",
     sort: "newest",
+    visibility: "active",
   });
 
   await act(async () => {
@@ -280,8 +285,88 @@ test("headless React refreshes and appends bounded bug history pages", async () 
   assert.match(historyUrls[0], /search=checkout/);
   assert.match(historyUrls[0], /status_group=in_progress/);
   assert.match(historyUrls[0], /sort=newest/);
+  assert.match(historyUrls[0], /visibility=active/);
   assert.match(historyUrls[1], /cursor=page-2/);
 
+  await act(async () => renderer.unmount());
+});
+
+test("headless React archives, restores, and clears closed history before refreshing", async () => {
+  const methods = [];
+  const config = {
+    apiBaseUrl: "https://handrail.example/api",
+    projectId: "project-123",
+    environment: "staging",
+    reportToken: "public-token",
+    applicationSessionTokenProvider: () => "history-session",
+    fetch: async (url, init) => {
+      methods.push(init.method);
+      if (init.method === "PUT") {
+        return jsonResponse({
+          contract_version: "v1",
+          bug_id: "bug-1",
+          archived: true,
+          archived_at: "2026-08-17T13:00:00.000Z",
+        });
+      }
+      if (init.method === "DELETE") {
+        return jsonResponse({
+          contract_version: "v1",
+          bug_id: "bug-1",
+          archived: false,
+          archived_at: null,
+        });
+      }
+      if (init.method === "POST") {
+        return jsonResponse({ contract_version: "v1", archived_count: 1 });
+      }
+      return jsonResponse({
+        contract_version: "v1",
+        bugs: [trackedBug("bug-1")],
+        summary: {
+          total: 1,
+          needs_attention: 0,
+          in_progress: 1,
+          closed: 0,
+          not_reproduced: 0,
+        },
+        query: {
+          search: null,
+          status_group: null,
+          sort: "newest",
+          visibility: "active",
+        },
+        pagination: {
+          limit: 20,
+          filtered_count: 1,
+          has_more: false,
+          next_cursor: null,
+        },
+      });
+    },
+  };
+  let value;
+  let renderer;
+  await act(async () => {
+    renderer = create(createElement(Harness, {
+      config,
+      loadPolicyOnMount: false,
+      onValue: (next) => {
+        value = next;
+      },
+    }));
+    await value?.refreshBugs?.();
+  });
+  if (value.tracking.status === "idle") {
+    await act(async () => value.refreshBugs());
+  }
+
+  await act(async () => value.archiveBug("bug-1"));
+  await act(async () => value.restoreBug("bug-1"));
+  await act(async () => value.archiveClosedBugs());
+
+  assert.deepEqual(methods, ["GET", "PUT", "GET", "DELETE", "GET", "POST", "GET"]);
+  assert.equal(value.tracking.status, "ready");
   await act(async () => renderer.unmount());
 });
 

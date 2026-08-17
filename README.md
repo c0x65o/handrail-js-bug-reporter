@@ -305,11 +305,42 @@ The four status groups partition the canonical rollups. `needs_attention` and
 `status_group` for filters instead of reclassifying raw status or workflow
 fields in application code.
 
-The opaque cursor carries the normalized search, group, sort, and snapshot.
+The opaque cursor carries the normalized search, group, sort, visibility, and
+snapshot.
 Continuation calls may send only `cursor` (plus `limit`) or repeat the same
 query. Conflicting query values are rejected. A UI may number sequential cursor
 pages it has already visited, but it should not promise random page access or
 synthesize offset pagination.
+
+Completed PM status is authoritative: `closed` and `wont_fix` bugs remain in
+the `closed` group even if an older automation run still contains attention or
+not-reproduced evidence.
+
+### Archive and restore app-owned history
+
+Archive state is scoped to the current verified application user and affects
+only their history presentation. It never deletes or changes the Handrail PM
+bug or another user's list:
+
+```ts
+await reporter.archiveBug(bugId);
+await reporter.restoreBug(bugId);
+
+const result = await reporter.archiveClosedBugs();
+console.log(result.archivedCount);
+
+const archived = await reporter.listBugs({
+  visibility: "archived",
+  sort: "newest",
+});
+```
+
+History visibility is `active` by default and also accepts `archived` or `all`.
+Rows expose `archived` and `archived_at`. An archive records the latest owned
+submission time, so a new report of the same canonical bug automatically makes
+it active again. Prefer a bulk UI label such as **Clear closed** with an
+explanation that the action only hides bugs from the current user's list, and
+provide an Archived view with restore.
 
 `status_rollup.stage` is one of `submitted`, `verifying`, `verified`, `fixing`,
 `fixed`, `deployed`, `closed`, `not_reproduced`, `wont_fix`, or
@@ -345,7 +376,8 @@ function BugReportForm() {
   // bugReport.setAutomationRequest
   // bugReport.replaceScreenshot / removeScreenshot / canAttachScreenshot
   // bugReport.submission / submit / resetSubmission
-  // bugReport.tracking / refreshBugs({ search, statusGroup, sort }) / loadMoreBugs
+  // bugReport.tracking / refreshBugs({ search, statusGroup, sort, visibility })
+  // bugReport.loadMoreBugs / archiveBug / restoreBug / archiveClosedBugs
   return null;
 }
 

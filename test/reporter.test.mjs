@@ -60,6 +60,8 @@ function trackedBug(overrides = {}) {
       version: null,
       updated_at: "2026-08-13T18:00:00.000Z",
     },
+    archived: false,
+    archived_at: null,
     occurrence_count: 3,
     reporter_occurrence_count: 2,
     first_reported_at: "2026-08-12T18:00:00.000Z",
@@ -425,6 +427,7 @@ test("verified reporters page and look up their bugs with fresh session headers"
             search: "checkout",
             status_group: "in_progress",
             sort: "oldest",
+            visibility: "archived",
           },
           pagination: {
             limit: 10,
@@ -456,6 +459,7 @@ test("verified reporters page and look up their bugs with fresh session headers"
     search: "  checkout  ",
     statusGroup: "in_progress",
     sort: "oldest",
+    visibility: "archived",
   });
   assert.equal(page.bugs[0].status_rollup.stage, "fixing");
   assert.equal(page.bugs[0].status_group, "in_progress");
@@ -468,6 +472,7 @@ test("verified reporters page and look up their bugs with fresh session headers"
     search: "checkout",
     statusGroup: "in_progress",
     sort: "oldest",
+    visibility: "archived",
   });
   assert.equal(page.pagination.filtered_count, 2);
   assert.equal(page.pagination.next_cursor, "opaque-page-2");
@@ -483,6 +488,7 @@ test("verified reporters page and look up their bugs with fresh session headers"
   assert.match(calls[0].url, /search=checkout/);
   assert.match(calls[0].url, /status_group=in_progress/);
   assert.match(calls[0].url, /sort=oldest/);
+  assert.match(calls[0].url, /visibility=archived/);
   assert.match(calls[1].url, /\/bugs\/bug%2F123\?/);
   assert.deepEqual(
     calls.map((call) => call.init.headers[APPLICATION_SESSION_TOKEN_HEADER]),
@@ -536,7 +542,69 @@ test("bug tracking rejects invalid discovery queries before making a request", a
     (error) => error instanceof BugReporterError
       && error.code === "tracking_rejected",
   );
+  await assert.rejects(
+    reporter.listBugs({ visibility: "hidden-forever" }),
+    (error) => error instanceof BugReporterError
+      && error.code === "tracking_rejected",
+  );
   assert.equal(requestCount, 0);
+});
+
+test("verified reporters archive, restore, and clear closed bugs", async () => {
+  const calls = [];
+  const reporter = createBugReporter(reporterConfig({
+    applicationSessionTokenProvider: () => "archive-session",
+    fetch: async (url, init) => {
+      calls.push({ url: String(url), init });
+      if (init.method === "PUT") {
+        return jsonResponse({
+          contract_version: "v1",
+          bug_id: "bug/123",
+          archived: true,
+          archived_at: "2026-08-17T13:00:00.000Z",
+        });
+      }
+      if (init.method === "DELETE") {
+        return jsonResponse({
+          contract_version: "v1",
+          bug_id: "bug/123",
+          archived: false,
+          archived_at: null,
+        });
+      }
+      return jsonResponse({
+        contract_version: "v1",
+        archived_count: 35,
+      });
+    },
+  }));
+
+  assert.deepEqual(await reporter.archiveBug("bug/123"), {
+    contract_version: "v1",
+    bugId: "bug/123",
+    archived: true,
+    archivedAt: "2026-08-17T13:00:00.000Z",
+  });
+  assert.deepEqual(await reporter.restoreBug("bug/123"), {
+    contract_version: "v1",
+    bugId: "bug/123",
+    archived: false,
+    archivedAt: null,
+  });
+  assert.deepEqual(await reporter.archiveClosedBugs(), {
+    contract_version: "v1",
+    archivedCount: 35,
+  });
+  assert.match(calls[0].url, /\/bugs\/bug%2F123\/archive\?/);
+  assert.match(calls[2].url, /\/mine\/archive-closed\?/);
+  assert.deepEqual(calls.map((call) => call.init.method), [
+    "PUT",
+    "DELETE",
+    "POST",
+  ]);
+  assert.ok(calls.every((call) => (
+    call.init.headers[APPLICATION_SESSION_TOKEN_HEADER] === "archive-session"
+  )));
 });
 
 test("submission without a current session degrades to vanilla automation", async () => {
