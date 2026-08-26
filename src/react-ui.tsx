@@ -863,7 +863,7 @@ function BugReportForm({ onCancel }: { readonly onCancel: () => void }): ReactEl
         <span>
           <strong>Email me when this bug is fixed</strong>
           <span style={{ display: "block", marginTop: 2, color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>
-            We’ll send one email after the fix is available in the environment you’re using{notificationEligibility?.recipientHint ? `, to ${notificationEligibility.recipientHint}` : ""}. It includes an unsubscribe link.
+            We’ll send one email after the fix is available in the environment you’re using{notificationEligibility?.recipientHint ? `, to ${notificationEligibility.recipientHint}` : ""}.
           </span>
         </span>
       </label>
