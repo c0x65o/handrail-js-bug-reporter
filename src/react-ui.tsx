@@ -6,6 +6,7 @@ import {
   type CSSProperties,
   type ChangeEvent,
   type ClipboardEvent as ReactClipboardEvent,
+  type DragEvent as ReactDragEvent,
   type FormEvent,
   type KeyboardEvent,
   type ReactElement,
@@ -20,6 +21,7 @@ import {
   type AutomationOptionKey,
   type BugTrackingStatusGroup,
   type BugTrackingVisibility,
+  type ScreenshotAttachment,
   type TrackedBugRecord,
 } from "./reporter";
 
@@ -174,8 +176,8 @@ const styles: Record<string, CSSProperties> = {
   dialog: {
     display: "flex",
     flexDirection: "column",
-    width: "min(700px, calc(100vw - 24px))",
-    height: "min(720px, calc(100dvh - 24px))",
+    width: "min(1120px, calc(100vw - 24px))",
+    height: "min(900px, calc(100dvh - 24px))",
     maxHeight: "calc(100vh - 24px)",
     overflow: "hidden",
     border: "1px solid var(--handrail-bug-border)",
@@ -240,6 +242,49 @@ const styles: Record<string, CSSProperties> = {
     padding: 14,
     border: "1px solid var(--handrail-bug-border)",
     borderRadius: 11,
+  },
+  screenshotDropzone: {
+    display: "grid",
+    placeItems: "center",
+    minHeight: 84,
+    padding: 16,
+    border: "1px dashed var(--handrail-bug-border)",
+    borderRadius: 10,
+    background: "var(--handrail-bug-surface-muted)",
+    textAlign: "center",
+  },
+  screenshotPreview: {
+    display: "flex",
+    alignItems: "center",
+    gap: 14,
+    flexWrap: "wrap",
+    padding: 10,
+    border: "1px solid var(--handrail-bug-border)",
+    borderRadius: 10,
+    background: "var(--handrail-bug-surface)",
+  },
+  screenshotThumbnail: {
+    width: 128,
+    height: 84,
+    flex: "0 0 128px",
+    border: "1px solid var(--handrail-bug-border)",
+    borderRadius: 8,
+    objectFit: "cover",
+    background: "var(--handrail-bug-surface-muted)",
+  },
+  formActions: {
+    position: "sticky",
+    bottom: -20,
+    zIndex: 2,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+    flexWrap: "wrap",
+    margin: "20px -20px -20px",
+    padding: "14px 20px",
+    borderTop: "1px solid var(--handrail-bug-border)",
+    background: "var(--handrail-bug-surface)",
   },
   checkboxLabel: {
     display: "flex",
@@ -322,6 +367,45 @@ function submissionMessage(
     };
   }
   return null;
+}
+
+function screenshotPreviewUrl(
+  screenshot: ScreenshotAttachment,
+): { readonly url: string | null; readonly revoke: boolean } {
+  if (typeof screenshot.data === "string") {
+    if (/^data:image\/(?:png|jpeg);base64,/iu.test(screenshot.data)) {
+      return { url: screenshot.data, revoke: false };
+    }
+    if (screenshot.mimeType && screenshot.data.trim()) {
+      return {
+        url: `data:${screenshot.mimeType};base64,${screenshot.data.replace(/\s+/gu, "")}`,
+        revoke: false,
+      };
+    }
+  }
+  if (
+    typeof Blob !== "undefined"
+    && screenshot.data instanceof Blob
+    && typeof URL !== "undefined"
+    && typeof URL.createObjectURL === "function"
+  ) {
+    return { url: URL.createObjectURL(screenshot.data), revoke: true };
+  }
+  return { url: null, revoke: false };
+}
+
+function screenshotDetails(screenshot: ScreenshotAttachment): string {
+  const type = screenshot.mimeType === "image/jpeg" ? "JPEG" : "PNG";
+  const size = typeof Blob !== "undefined" && screenshot.data instanceof Blob
+    ? screenshot.data.size
+    : null;
+  if (size === null) return `${type} · up to 20 MiB`;
+  const formatted = size < 1024
+    ? `${size} B`
+    : size < 1024 * 1024
+      ? `${(size / 1024).toFixed(1)} KiB`
+      : `${(size / (1024 * 1024)).toFixed(1)} MiB`;
+  return `${type} · ${formatted}`;
 }
 
 function bugDate(value: string | null): string {
@@ -506,9 +590,13 @@ function BugHistory(): ReactElement {
   </section>;
 }
 
-function BugReportForm(): ReactElement {
+function BugReportForm({ onCancel }: { readonly onCancel: () => void }): ReactElement {
   const reporter = useHandrailBugReporter();
+  const successHeadingId = useId();
   const [localError, setLocalError] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const message = submissionMessage(reporter.submission);
   const notificationEligibility = reporter.policy?.reporterNotifications;
   const notificationsAvailable = notificationEligibility?.available === true;
@@ -518,6 +606,26 @@ function BugReportForm(): ReactElement {
       reporter.updateForm({ notifyOnResolution: false });
     }
   }, [notificationsAvailable, reporter.form.notifyOnResolution, reporter.updateForm]);
+
+  useEffect(() => {
+    const screenshot = reporter.form.screenshot;
+    if (!screenshot) {
+      setPreviewUrl(null);
+      return undefined;
+    }
+    const preview = screenshotPreviewUrl(screenshot);
+    setPreviewUrl(preview.url);
+    return () => {
+      if (
+        preview.revoke
+        && preview.url
+        && typeof URL !== "undefined"
+        && typeof URL.revokeObjectURL === "function"
+      ) {
+        URL.revokeObjectURL(preview.url);
+      }
+    };
+  }, [reporter.form.screenshot]);
 
   const attachScreenshot = (file: File): boolean => {
     setLocalError(null);
@@ -541,8 +649,9 @@ function BugReportForm(): ReactElement {
 
   const onScreenshot = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    event.target.value = "";
     if (!file) return;
-    if (!attachScreenshot(file)) event.target.value = "";
+    attachScreenshot(file);
   };
 
   const onPaste = (event: ReactClipboardEvent<HTMLFormElement>) => {
@@ -552,6 +661,22 @@ function BugReportForm(): ReactElement {
       ?.getAsFile();
     if (!file) return;
     event.preventDefault();
+    attachScreenshot(file);
+  };
+
+  const onScreenshotDragOver = (event: ReactDragEvent<HTMLElement>) => {
+    if (!reporter.canAttachScreenshot || !Array.from(event.dataTransfer.types).includes("Files")) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setDragActive(true);
+  };
+
+  const onScreenshotDrop = (event: ReactDragEvent<HTMLElement>) => {
+    if (!reporter.canAttachScreenshot) return;
+    const file = Array.from(event.dataTransfer.files)[0];
+    if (!file) return;
+    event.preventDefault();
+    setDragActive(false);
     attachScreenshot(file);
   };
 
@@ -568,6 +693,70 @@ function BugReportForm(): ReactElement {
       // The provider exposes a redacted, presentation-safe error state.
     }
   };
+
+  const startAnotherReport = () => {
+    reporter.resetSubmission();
+    reporter.updateForm({
+      title: "",
+      description: "",
+      severity: undefined,
+      reproducer: undefined,
+      screenshot: null,
+      automationRequests: [],
+      notifyOnResolution: false,
+    });
+  };
+
+  if (reporter.submission.status === "submitted") {
+    const result = reporter.submission.result?.status === "submitted"
+      ? reporter.submission.result
+      : null;
+    const warning = result?.notificationWarning || null;
+    const subscription = result?.notificationSubscription || null;
+    return <section
+      data-handrail-bug-submission-success="true"
+      aria-labelledby={successHeadingId}
+      style={{
+        display: "grid",
+        alignContent: "center",
+        justifyItems: "center",
+        minHeight: "min(520px, 60vh)",
+        padding: "32px 18px",
+        textAlign: "center",
+      }}
+    >
+      <div
+        aria-hidden="true"
+        style={{
+          display: "grid",
+          placeItems: "center",
+          width: 56,
+          height: 56,
+          borderRadius: "50%",
+          background: "var(--handrail-bug-success-surface)",
+          color: "var(--handrail-bug-success-text)",
+          fontSize: 30,
+          fontWeight: 800,
+        }}
+      >✓</div>
+      <h3 id={successHeadingId} style={{ margin: "18px 0 8px", fontSize: 24 }}>
+        Thanks for submitting this bug
+      </h3>
+      <p role="status" aria-live="polite" style={{ maxWidth: 560, margin: 0, color: "var(--handrail-bug-muted-text)", lineHeight: 1.55 }}>
+        Your report was sent to the product team. You can follow its progress from My bugs.
+      </p>
+      {subscription?.active === true && <div style={{ ...styles.status, maxWidth: 560, marginTop: 18, marginBottom: 0, background: "var(--handrail-bug-success-surface)", color: "var(--handrail-bug-success-text)" }}>
+        Email updates are enabled{subscription.recipientHint ? ` for ${subscription.recipientHint}` : ""}.
+      </div>}
+      {warning && <div role="alert" style={{ ...styles.status, maxWidth: 560, marginTop: 18, marginBottom: 0, background: "var(--handrail-bug-danger-surface)", color: "var(--handrail-bug-danger-text)" }}>
+        Your bug is saved, but email updates could not be enabled.
+      </div>}
+      <div style={{ display: "flex", justifyContent: "center", gap: 10, flexWrap: "wrap", marginTop: 24 }}>
+        <button type="button" onClick={startAnotherReport} style={buttonStyle("secondary")}>Report another bug</button>
+        <button type="button" onClick={onCancel} style={buttonStyle("primary")}>Done</button>
+      </div>
+    </section>;
+  }
 
   return <form onSubmit={(event) => void onSubmit(event)} onPaste={onPaste}>
     {localError && <div role="alert" style={{ ...styles.status, background: "var(--handrail-bug-danger-surface)", color: "var(--handrail-bug-danger-text)" }}>{localError}</div>}
@@ -610,20 +799,42 @@ function BugReportForm(): ReactElement {
       </select>
     </label>
 
-    {reporter.canAttachScreenshot && <fieldset style={styles.fieldset}>
+    {reporter.canAttachScreenshot && <fieldset
+      data-handrail-bug-screenshot-dropzone="true"
+      style={styles.fieldset}
+      onDragEnter={onScreenshotDragOver}
+      onDragOver={onScreenshotDragOver}
+      onDragLeave={() => setDragActive(false)}
+      onDrop={onScreenshotDrop}
+    >
       <legend style={{ padding: "0 5px", fontWeight: 700 }}>Screenshot</legend>
       <input
+        ref={fileInputRef}
         aria-label="Attach screenshot"
         type="file"
         accept="image/png,image/jpeg"
+        hidden
+        tabIndex={-1}
         onChange={onScreenshot}
       />
-      <div style={{ marginTop: 7, color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>
-        Upload or paste one PNG or JPEG, up to 20 MiB. The SDK validates file content before sending.
-      </div>
-      {reporter.form.screenshot && <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
-        <span>{reporter.form.screenshot.filename || "Attached screenshot"}</span>
-        <button type="button" onClick={reporter.removeScreenshot} style={{ border: 0, padding: 0, color: "var(--handrail-bug-accent)", background: "transparent", cursor: "pointer", font: "inherit", textDecoration: "underline" }}>Remove</button>
+      {reporter.form.screenshot ? <div style={styles.screenshotPreview}>
+        {previewUrl
+          ? <img src={previewUrl} alt="Bug report screenshot preview" style={styles.screenshotThumbnail} />
+          : <div role="img" aria-label="Screenshot preview unavailable" style={{ ...styles.screenshotThumbnail, display: "grid", placeItems: "center", color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>Preview unavailable</div>}
+        <div style={{ flex: "1 1 180px", minWidth: 0 }}>
+          <strong style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{reporter.form.screenshot.filename || "Attached screenshot"}</strong>
+          <div style={{ marginTop: 4, color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>{screenshotDetails(reporter.form.screenshot)}</div>
+          <div style={{ display: "flex", gap: 12, marginTop: 10 }}>
+            <button type="button" onClick={() => fileInputRef.current?.click()} style={{ border: 0, padding: 0, color: "var(--handrail-bug-accent)", background: "transparent", cursor: "pointer", font: "inherit", fontWeight: 700 }}>Replace</button>
+            <button type="button" onClick={reporter.removeScreenshot} style={{ border: 0, padding: 0, color: "var(--handrail-bug-danger-text)", background: "transparent", cursor: "pointer", font: "inherit", fontWeight: 700 }}>Remove</button>
+          </div>
+        </div>
+      </div> : <div style={{
+        ...styles.screenshotDropzone,
+        ...(dragActive ? { borderColor: "var(--handrail-bug-accent)", color: "var(--handrail-bug-accent)" } : {}),
+      }}>
+        <button type="button" onClick={() => fileInputRef.current?.click()} style={{ ...buttonStyle("secondary"), background: "var(--handrail-bug-surface)" }}>Add screenshot</button>
+        <div style={{ marginTop: 8, color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>Choose, paste, or drop one PNG or JPEG, up to 20 MiB.</div>
       </div>}
     </fieldset>}
 
@@ -658,11 +869,13 @@ function BugReportForm(): ReactElement {
       </label>
     </fieldset>}
 
-    <div style={{ display: "flex", justifyContent: "flex-end", gap: 9, marginTop: 20 }}>
-      {reporter.submission.status === "submitted" && <button type="button" onClick={() => { reporter.resetSubmission(); reporter.updateForm({ title: "", description: "", screenshot: null, automationRequests: [], notifyOnResolution: false }); }} style={buttonStyle("secondary")}>Report another</button>}
-      <button type="submit" disabled={reporter.submission.status === "submitting"} style={{ ...buttonStyle("primary"), opacity: reporter.submission.status === "submitting" ? 0.65 : 1 }}>
-        {reporter.submission.status === "submitting" ? "Submitting…" : "Submit bug"}
-      </button>
+    <div style={styles.formActions}>
+      <button type="button" onClick={onCancel} disabled={reporter.submission.status === "submitting"} style={buttonStyle("secondary")}>Cancel</button>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 9, flexWrap: "wrap" }}>
+        <button type="submit" disabled={reporter.submission.status === "submitting"} style={{ ...buttonStyle("primary"), opacity: reporter.submission.status === "submitting" ? 0.65 : 1 }}>
+          {reporter.submission.status === "submitting" ? "Submitting…" : "Submit bug"}
+        </button>
+      </div>
     </div>
   </form>;
 }
@@ -712,10 +925,26 @@ export function HandrailBugReporterDialog({
     }
   };
 
+  const closeDialog = () => {
+    if (reporter.submission.status === "submitted") {
+      reporter.resetSubmission();
+      reporter.updateForm({
+        title: "",
+        description: "",
+        severity: undefined,
+        reproducer: undefined,
+        screenshot: null,
+        automationRequests: [],
+        notifyOnResolution: false,
+      });
+    }
+    onClose();
+  };
+
   const onDialogKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
-      onClose();
+      closeDialog();
       return;
     }
     if (event.key !== "Tab") return;
@@ -744,7 +973,7 @@ export function HandrailBugReporterDialog({
     data-theme={appearance?.themeMode || "auto"}
     style={{ ...styles.overlay, ...variables }}
     onMouseDown={(event) => {
-      if (event.target === event.currentTarget) onClose();
+      if (event.target === event.currentTarget) closeDialog();
     }}
   >
     <section
@@ -763,7 +992,7 @@ export function HandrailBugReporterDialog({
           <h2 id={headingId} style={{ margin: 0, fontSize: 20 }}>{heading}</h2>
           <div id={descriptionId} style={{ marginTop: 4, color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>Send a bug report to your product team.</div>
         </div>
-        <button type="button" aria-label="Close bug reporter" onClick={onClose} style={{ ...buttonStyle("secondary"), padding: "5px 10px", fontSize: 20 }}>×</button>
+        <button type="button" aria-label="Close bug reporter" onClick={closeDialog} style={{ ...buttonStyle("secondary"), padding: "5px 10px", fontSize: 20 }}>×</button>
       </header>
       <div style={styles.content}>
         {showHistory && <div role="tablist" aria-label="Bug reporter views" style={styles.tabs}>
@@ -771,7 +1000,7 @@ export function HandrailBugReporterDialog({
           <button id={historyTabId} type="button" role="tab" aria-controls={historyPanelId} aria-selected={tab === "history"} tabIndex={tab === "history" ? 0 : -1} onClick={() => selectTab("history")} style={{ ...styles.tab, ...(tab === "history" ? styles.activeTab : {}) }}>My bugs</button>
         </div>}
         {tab === "report"
-          ? <div id={reportPanelId} role={showHistory ? "tabpanel" : undefined} aria-labelledby={showHistory ? reportTabId : undefined}><BugReportForm /></div>
+          ? <div id={reportPanelId} role={showHistory ? "tabpanel" : undefined} aria-labelledby={showHistory ? reportTabId : undefined}><BugReportForm onCancel={closeDialog} /></div>
           : <div id={historyPanelId} role="tabpanel" aria-labelledby={historyTabId}><BugHistory /></div>}
       </div>
     </section>

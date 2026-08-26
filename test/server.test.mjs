@@ -288,6 +288,49 @@ test("same-origin forwarding validates and isolates report notification consent"
   );
 });
 
+test("same-origin notification forwarding logs bounded context without credentials", async () => {
+  const diagnostics = [];
+  const originalConsoleError = console.error;
+  console.error = (message) => diagnostics.push(JSON.parse(String(message)));
+  try {
+    const handler = createSameOriginBugReporterHandler(sharedConfig({
+      resolveApplicationSessionToken: () => "secret-session-value",
+      fetch: async () => jsonResponse({
+        error: "The feedback report was not found.",
+        code: "feedback_notification_report_not_found",
+      }, 404),
+    }));
+    const response = await handler(new Request(
+      "https://app.example/api/mobile-bug-reports/bugs/bug-log-1/subscription",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "https://app.example" },
+        body: JSON.stringify({
+          reporter_notification: { notify_on_resolution: true },
+        }),
+      },
+    ));
+
+    assert.equal(response.status, 404);
+    assert.equal(diagnostics.length, 1);
+    assert.deepEqual(diagnostics[0], {
+      schema_version: 1,
+      component: "handrail_bug_reporter_proxy",
+      event: "bug_notification.forward_failed",
+      stage: "upstream_rejected",
+      status: 404,
+      project_id: "project-123",
+      environment: "staging",
+      bug_id: "bug-log-1",
+      application_session_forwarded: true,
+      attempts: 1,
+    });
+    assert.doesNotMatch(JSON.stringify(diagnostics), /secret-session-value|server-token/u);
+  } finally {
+    console.error = originalConsoleError;
+  }
+});
+
 test("same-origin forwarding scopes archive, restore, and clear-closed mutations", async () => {
   const upstreamRequests = [];
   const handler = createSameOriginBugReporterHandler(sharedConfig({

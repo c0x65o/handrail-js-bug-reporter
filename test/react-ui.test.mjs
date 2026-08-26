@@ -173,6 +173,8 @@ test("appearance tokens, dialog semantics, focus containment, Escape, and focus 
     assert.equal(dialog.props["aria-modal"], "true");
     assert.ok(dialog.props["aria-labelledby"]);
     assert.ok(dialog.props["aria-describedby"]);
+    assert.equal(dialog.props.style.width, "min(1120px, calc(100vw - 24px))");
+    assert.equal(dialog.props.style.height, "min(900px, calc(100dvh - 24px))");
     assert.equal(fakeDocument.activeElement, first);
 
     let prevented = false;
@@ -190,6 +192,9 @@ test("appearance tokens, dialog semantics, focus containment, Escape, and focus 
     dialog.props.onKeyDown({ key: "Escape", shiftKey: false, preventDefault: () => undefined });
     assert.equal(closed, 1);
 
+    await act(async () => renderer.root.findByProps({ children: "Cancel" }).props.onClick());
+    assert.equal(closed, 2);
+
     await act(async () => renderer.unmount());
     assert.equal(fakeDocument.activeElement, previous);
   } finally {
@@ -200,7 +205,7 @@ test("appearance tokens, dialog semantics, focus containment, Escape, and focus 
   }
 });
 
-test("the packaged form delegates uploads, direct screenshot paste, policy, automation, and unchecked notification consent", async () => {
+test("the packaged form delegates upload, paste, drop, thumbnail, policy, automation, and unchecked consent", async () => {
   const requests = [];
   const fetch = async (url, init) => {
     requests.push({ url: String(url), init });
@@ -239,6 +244,8 @@ test("the packaged form delegates uploads, direct screenshot paste, policy, auto
   });
 
   const invalidFileInput = renderer.root.findByProps({ "aria-label": "Attach screenshot" });
+  assert.equal(invalidFileInput.props.hidden, true);
+  assert.equal(renderer.root.findAllByProps({ children: "Add screenshot" }).length, 1);
   await act(async () => invalidFileInput.props.onChange({
     target: { files: [{ type: "image/gif", name: "bad.gif" }], value: "bad.gif" },
   }));
@@ -248,6 +255,9 @@ test("the packaged form delegates uploads, direct screenshot paste, policy, auto
   Object.defineProperty(png, "name", { value: "checkout.png" });
   await act(async () => invalidFileInput.props.onChange({ target: { files: [png], value: "checkout.png" } }));
   assert.equal(renderer.root.findAllByProps({ children: "checkout.png" }).length, 1);
+  assert.equal(renderer.root.findAllByProps({ alt: "Bug report screenshot preview" }).length, 1);
+  assert.equal(renderer.root.findAllByProps({ children: "Replace" }).length, 1);
+  assert.equal(renderer.root.findAllByProps({ children: "Remove" }).length, 1);
 
   const pastedPng = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])], { type: "image/png" });
   Object.defineProperty(pastedPng, "name", { value: "clipboard.png" });
@@ -265,6 +275,24 @@ test("the packaged form delegates uploads, direct screenshot paste, policy, auto
   assert.equal(prevented, 1);
   assert.equal(renderer.root.findAllByProps({ children: "clipboard.png" }).length, 1);
   assert.equal(renderer.root.findAllByProps({ children: "checkout.png" }).length, 0);
+
+  const droppedPng = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])], { type: "image/png" });
+  Object.defineProperty(droppedPng, "name", { value: "dropped.png" });
+  const dropzone = renderer.root.findByProps({ "data-handrail-bug-screenshot-dropzone": "true" });
+  let dragPrevented = 0;
+  const dragData = { types: ["Files"], files: [droppedPng], dropEffect: "none" };
+  await act(async () => dropzone.props.onDragOver({
+    dataTransfer: dragData,
+    preventDefault: () => { dragPrevented += 1; },
+  }));
+  await act(async () => dropzone.props.onDrop({
+    dataTransfer: dragData,
+    preventDefault: () => { dragPrevented += 1; },
+  }));
+  assert.equal(dragPrevented, 2);
+  assert.equal(dragData.dropEffect, "copy");
+  assert.equal(renderer.root.findAllByProps({ children: "dropped.png" }).length, 1);
+  assert.equal(renderer.root.findAllByProps({ children: "clipboard.png" }).length, 0);
 
   const checkboxes = renderer.root.findAll((node) => node.type === "input" && node.props.type === "checkbox");
   const automation = checkboxes.find((node) => node.props["aria-label"] === undefined);
@@ -289,7 +317,59 @@ test("the packaged form delegates uploads, direct screenshot paste, policy, auto
       consent_version: "v1",
     },
   });
-  assert.match(renderer.root.findByProps({ role: "status" }).children.join(""), /submitted successfully/i);
+  const success = renderer.root.findByProps({ "data-handrail-bug-submission-success": "true" });
+  assert.ok(success);
+  assert.equal(renderer.root.findAllByProps({ children: "Thanks for submitting this bug" }).length, 1);
+  assert.equal(renderer.root.findAll((node) => (
+    node.children.join("") === "Email updates are enabled for j***@example.com."
+  )).length, 1);
+  assert.equal(renderer.root.findAllByProps({ placeholder: "What went wrong?" }).length, 0);
+  assert.equal(renderer.root.findAll((node) => node.type === "textarea").length, 0);
+
+  await act(async () => renderer.root.findByProps({ children: "Report another bug" }).props.onClick());
+  assert.equal(renderer.root.findByProps({ placeholder: "What went wrong?" }).props.value, "");
+  assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-submission-success": "true" }).length, 0);
+  await act(async () => renderer.unmount());
+});
+
+test("a notification failure still shows a thank-you screen and clearly confirms the bug was saved", async () => {
+  const fetch = async (url, init) => {
+    if (init.method === "GET") return jsonResponse(reporterPolicy);
+    if (String(url).includes("/subscription")) {
+      return jsonResponse({
+        error: "The feedback report was not found.",
+        code: "feedback_notification_report_not_found",
+      }, 404);
+    }
+    return jsonResponse({ bug_id: "bug-ui-warning" }, 201);
+  };
+  let renderer;
+  await act(async () => {
+    renderer = create(createElement(
+      HandrailBugReporterProvider,
+      { config: config(fetch) },
+      createElement(HandrailBugReporterDialog, { open: true, onClose: () => undefined }),
+    ));
+  });
+
+  await act(async () => {
+    renderer.root.findByProps({ placeholder: "What went wrong?" }).props.onChange({
+      target: { value: "Saved but notification failed" },
+    });
+    renderer.root.find((node) => node.type === "textarea").props.onChange({
+      target: { value: "The report must remain successful." },
+    });
+    renderer.root.findByProps({ "aria-label": "Email me when this bug is fixed" }).props.onChange({
+      target: { checked: true },
+    });
+  });
+  await act(async () => renderer.root.find((node) => node.type === "form").props.onSubmit({
+    preventDefault: () => undefined,
+  }));
+
+  assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-submission-success": "true" }).length, 1);
+  assert.match(renderer.root.findByProps({ role: "alert" }).children.join(""), /bug is saved/i);
+  assert.equal(renderer.root.findAllByProps({ placeholder: "What went wrong?" }).length, 0);
   await act(async () => renderer.unmount());
 });
 

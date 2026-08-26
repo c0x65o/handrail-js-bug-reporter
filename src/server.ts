@@ -184,6 +184,32 @@ function forwardingJson(status: number, code: string): Response {
   });
 }
 
+function logSubscriptionForwardingFailure(input: {
+  readonly stage: "upstream_unavailable" | "upstream_rejected" | "response_unreadable";
+  readonly status: number;
+  readonly projectId: string;
+  readonly environment: string;
+  readonly bugId: string | null;
+  readonly applicationSessionForwarded: boolean;
+  readonly attempts: number;
+}): void {
+  // Deliberately exclude request bodies, recipient data, report tokens, and
+  // application session tokens. This joins safely with Handrail's API-side
+  // subscription diagnostics by bug/project/environment.
+  console.error(JSON.stringify({
+    schema_version: 1,
+    component: "handrail_bug_reporter_proxy",
+    event: "bug_notification.forward_failed",
+    stage: input.stage,
+    status: input.status,
+    project_id: input.projectId,
+    environment: input.environment,
+    bug_id: input.bugId,
+    application_session_forwarded: input.applicationSessionForwarded,
+    attempts: input.attempts,
+  }));
+}
+
 function maxAttempts(value: unknown): number {
   return typeof value === "number" && Number.isInteger(value)
     ? Math.min(3, Math.max(1, value))
@@ -463,6 +489,7 @@ export function createSameOriginBugReporterHandler<
     }
 
     let upstream: Response | null = null;
+    let applicationSessionForwarded = false;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       if (attempt > 0) await wait(delay * 2 ** (attempt - 1));
       let applicationSessionToken: string | null = null;
@@ -483,6 +510,7 @@ export function createSameOriginBugReporterHandler<
       if (applicationSessionToken) {
         headers[APPLICATION_SESSION_TOKEN_HEADER] = applicationSessionToken;
       }
+      applicationSessionForwarded = Boolean(applicationSessionToken);
       try {
         upstream = await fetchImpl(endpoint, {
           method: isSubmission || isSubscription
@@ -510,14 +538,49 @@ export function createSameOriginBugReporterHandler<
       }
     }
 
-    if (!upstream) return forwardingJson(502, "bug_reporting_unavailable");
+    if (!upstream) {
+      if (isSubscription) {
+        logSubscriptionForwardingFailure({
+          stage: "upstream_unavailable",
+          status: 502,
+          projectId: projectId!,
+          environment: environment!,
+          bugId: pathParts[1] ? decodeURIComponent(pathParts[1]) : null,
+          applicationSessionForwarded,
+          attempts,
+        });
+      }
+      return forwardingJson(502, "bug_reporting_unavailable");
+    }
     if (!upstream.ok) {
+      if (isSubscription) {
+        logSubscriptionForwardingFailure({
+          stage: "upstream_rejected",
+          status: upstream.status,
+          projectId: projectId!,
+          environment: environment!,
+          bugId: pathParts[1] ? decodeURIComponent(pathParts[1]) : null,
+          applicationSessionForwarded,
+          attempts,
+        });
+      }
       return forwardingJson(upstream.status, "bug_reporting_rejected");
     }
     let responseBody: string;
     try {
       responseBody = await upstream.text();
     } catch {
+      if (isSubscription) {
+        logSubscriptionForwardingFailure({
+          stage: "response_unreadable",
+          status: 502,
+          projectId: projectId!,
+          environment: environment!,
+          bugId: pathParts[1] ? decodeURIComponent(pathParts[1]) : null,
+          applicationSessionForwarded,
+          attempts,
+        });
+      }
       return forwardingJson(502, "bug_reporting_unavailable");
     }
     return new Response(responseBody || null, {

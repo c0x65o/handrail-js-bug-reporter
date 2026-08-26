@@ -97,7 +97,11 @@ an address. `recipientHint` contains safe display copy for the consent UI.
 
 The SDK saves the report first, then persists consent through the report's
 `/subscription` child route. A subscription failure cannot turn an accepted
-report into a submission error. Handrail sends one email only after release
+report into a submission error. On a subscription failure, the same-origin
+proxy and Handrail API emit structured, privacy-safe diagnostics containing
+the failing stage, HTTP status, bug/project/environment identifiers, and
+boolean identity/ownership checkpoints. They never log the recipient address,
+report token, application session token, or request body. Handrail sends one email only after release
 evidence confirms the fix is available in the environment where the report
 originated. Internal Fixed and Deployed transitions do not each produce mail.
 The email includes a report-scoped unsubscribe link. Existing integrations remain compatible because
@@ -428,11 +432,16 @@ export function App() {
 
 The dialog delegates all policy, validation, submission, notification, and
 history operations to the same headless provider described below. It includes
-the bug form, one validated PNG/JPEG screenshot by upload or direct clipboard
-paste, policy-derived Ask controls,
+the bug form, one validated PNG/JPEG screenshot by styled upload, direct
+clipboard paste, or drag and drop, an immediate thumbnail with Replace/Remove
+actions, policy-derived Ask controls,
 an unchecked report-scoped update consent control when the verified user is
 eligible, and an owned **My bugs** view with search, status/visibility/sort
 filters, keyset pagination, archive, restore, and **Clear closed**.
+After Handrail accepts a report, the form is replaced by a dedicated thank-you
+screen rather than leaving submitted fields editable. It confirms whether
+email updates were enabled, keeps notification failure separate from report
+success, and offers **Report another bug** and **Done** actions.
 
 `appearance.themeMode` accepts `auto`, `light`, or `dark`. `auto` is the
 default and inherits the host color scheme and typography. Override any of
@@ -443,7 +452,10 @@ these typed tokens without changing reporter behavior:
 - `dangerSurface`, `dangerText`, `successSurface`, `successText`
 - `radius`, `fontFamily`
 
-The same values are installed as scoped `--handrail-bug-*` CSS variables on
+The stable dialog uses most of the available viewport (up to 1120 × 900 px),
+keeps the same dimensions while switching between the report and history tabs,
+and scrolls its content within that fixed shell. The same values are installed
+as scoped `--handrail-bug-*` CSS variables on
 the overlay. `appearance.className` targets the dialog and `appearance.style`
 targets the overlay for application-specific integration. The dialog has an
 accessible name and description, contains Tab focus, closes on Escape or an
