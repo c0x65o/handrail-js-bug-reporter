@@ -65,6 +65,8 @@ export type {
   RedactionHook,
   ReporterAccessLevel,
   ReporterRetryOptions,
+  ReporterNotificationPreference,
+  ReporterNotificationSubscription,
   ScreenshotAttachment,
   SubmissionOptions,
   TrackedBugRecord,

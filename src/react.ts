@@ -34,6 +34,7 @@ import {
   type BugTrackingQuery,
   type BugTrackingSummary,
   type HandrailBugReporterClient,
+  type ReporterNotificationPreference,
   type ScreenshotAttachment,
   type TrackedBugRecord,
 } from "./reporter";
@@ -96,6 +97,8 @@ export type {
   RedactionHook,
   ReporterAccessLevel,
   ReporterRetryOptions,
+  ReporterNotificationPreference,
+  ReporterNotificationSubscription,
   ScreenshotAttachment,
   SubmissionOptions,
   TrackedBugRecord,
@@ -148,6 +151,8 @@ export interface BugReporterFormState {
   readonly metadata?: Readonly<Record<string, unknown>>;
   readonly screenshot: ScreenshotAttachment | null;
   readonly automationRequests: readonly AutomationOptionKey[];
+  readonly notifyOnResolution: boolean;
+  readonly notificationEmail: string;
 }
 
 export type BugReporterPolicyStatus =
@@ -261,6 +266,8 @@ function initialFormState(
     metadata: initial?.metadata,
     screenshot: initial?.screenshot || null,
     automationRequests: Object.freeze([...(initial?.automationRequests || [])]),
+    notifyOnResolution: initial?.notifyOnResolution === true,
+    notificationEmail: initial?.notificationEmail || "",
   };
 }
 
@@ -409,6 +416,14 @@ export function HandrailBugReporterProvider({
         profileKey: form.profileKey,
         metadata: form.metadata,
         screenshot: form.screenshot || undefined,
+        ...(form.notifyOnResolution
+          ? {
+              notification: {
+                email: form.notificationEmail,
+                notifyOnResolution: true,
+              } satisfies ReporterNotificationPreference,
+            }
+          : {}),
         ...overrides,
       };
       try {

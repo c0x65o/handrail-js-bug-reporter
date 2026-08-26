@@ -91,6 +91,21 @@ export interface BugReportInput {
   readonly profileKey?: string;
   readonly metadata?: Readonly<Record<string, unknown>>;
   readonly screenshot?: ScreenshotAttachment;
+  /** Explicit report-scoped consent for Fixed and Deployed email updates. */
+  readonly notification?: ReporterNotificationPreference;
+}
+
+export interface ReporterNotificationPreference {
+  readonly email: string;
+  readonly notifyOnResolution: true;
+  readonly consentVersion?: "v1" | string;
+}
+
+export interface ReporterNotificationSubscription {
+  readonly active: boolean;
+  readonly created: boolean;
+  readonly recipientHint: string | null;
+  readonly subscribedAt: string | null;
 }
 
 export type RedactionHook = (
@@ -290,6 +305,8 @@ export type BugReportSubmissionResult =
       statusCode: number;
       bugId: string | null;
       response: JsonValue | null;
+      notificationSubscription?: ReporterNotificationSubscription | null;
+      notificationWarning?: string | null;
     }>;
 
 export type BugReporterErrorCode =
@@ -1347,11 +1364,105 @@ export class HandrailBugReporterClient {
     } catch {
       responseBody = null;
     }
+    const bugId = nullableString(plainRecord(responseBody)?.bug_id);
+    let notificationSubscription: ReporterNotificationSubscription | null = null;
+    let notificationWarning: string | null = null;
+    if (input.notification?.notifyOnResolution === true) {
+      if (!bugId) {
+        notificationWarning = "The report was sent, but update notifications could not be enabled.";
+      } else {
+        try {
+          notificationSubscription = await this.subscribeToUpdates(
+            bugId,
+            input.notification,
+            { signal: options.signal },
+          );
+        } catch {
+          // Report acceptance is the durable boundary. A subscription failure
+          // is surfaced separately and never turns a saved report into a false
+          // submission failure.
+          notificationWarning = "The report was sent, but update notifications could not be enabled.";
+        }
+      }
+    }
     return Object.freeze({
       status: "submitted",
       statusCode: response.status,
-      bugId: nullableString(plainRecord(responseBody)?.bug_id),
+      bugId,
       response: responseBody,
+      ...(input.notification?.notifyOnResolution === true
+        ? { notificationSubscription, notificationWarning }
+        : {}),
+    });
+  }
+
+  async subscribeToUpdates(
+    bugId: string,
+    preference: ReporterNotificationPreference,
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<ReporterNotificationSubscription> {
+    if (this.configuration.status !== "ready" || !this.endpoints) {
+      throw new BugReporterError(
+        "invalid_configuration",
+        "Bug reporting is not configured.",
+      );
+    }
+    const normalizedBugId = cleanString(bugId);
+    const email = cleanString(preference?.email)?.toLowerCase() || null;
+    if (
+      !normalizedBugId
+      || preference?.notifyOnResolution !== true
+      || !email
+      || email.length > 254
+      || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email)
+    ) {
+      throw new BugReporterError(
+        "invalid_report",
+        "A valid notification preference is required.",
+      );
+    }
+    const url = urlWithQuery(
+      `${this.endpoints.bugs}/${encodeURIComponent(normalizedBugId)}/subscription`,
+      { project_id: this.projectId, environment: this.environment },
+    );
+    const body = JSON.stringify({
+      reporter_notification: {
+        email,
+        notify_on_resolution: true,
+        consent_version: cleanString(preference.consentVersion) || "v1",
+      },
+    });
+    const request = await this.requestWithRetries(url, {
+      method: "POST",
+      signal: options.signal,
+      vanillaBody: body,
+      automationBody: body,
+    });
+    if (!request.response?.ok) {
+      throw new BugReporterError(
+        "submission_rejected",
+        "Update notifications could not be enabled.",
+        request.response?.status || null,
+      );
+    }
+    let response: Record<string, unknown> | null = null;
+    try {
+      response = plainRecord(await request.response.json());
+    } catch {
+      response = null;
+    }
+    const subscription = plainRecord(response?.notification_subscription);
+    if (subscription?.active !== true) {
+      throw new BugReporterError(
+        "submission_rejected",
+        "Update notifications could not be enabled.",
+      );
+    }
+    return Object.freeze({
+      active: true,
+      created: subscription.created === true,
+      recipientHint: nullableString(subscription.recipient_hint),
+      subscribedAt: nullableString(subscription.subscribed_at),
     });
   }
 

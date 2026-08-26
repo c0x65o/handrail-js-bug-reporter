@@ -70,6 +70,32 @@ await reporter.submit(
 );
 ```
 
+### Report update notifications
+
+Applications may offer an unchecked, report-scoped opt-in for Fixed and
+Deployed email updates:
+
+```ts
+const result = await reporter.submit({
+  title: "Checkout button does not respond",
+  description: "Clicking Continue has no visible effect.",
+  notification: {
+    email: currentUser.email,
+    notifyOnResolution: true,
+  },
+});
+
+if (result.status === "submitted" && result.notificationWarning) {
+  showNotice(result.notificationWarning);
+}
+```
+
+The SDK saves the report first, then persists consent through the report's
+`/subscription` child route. It never puts the email address in the bug payload.
+A subscription failure cannot turn an accepted report into a submission error.
+Every lifecycle email includes a report-scoped unsubscribe link. Existing
+integrations are unchanged because `notification` is optional.
+
 The direct browser provider example applies only when the application already
 exposes a browser-readable session token. Use the same-origin forwarding
 pattern below for HttpOnly cookies; never weaken an HttpOnly session to satisfy

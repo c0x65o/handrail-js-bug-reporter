@@ -72,6 +72,8 @@ export type {
   RedactionHook,
   ReporterAccessLevel,
   ReporterRetryOptions,
+  ReporterNotificationPreference,
+  ReporterNotificationSubscription,
   ScreenshotAttachment,
   SubmissionOptions,
   TrackedBugRecord,
@@ -271,6 +273,30 @@ function normalizeForwardedPayload(
   return JSON.stringify(body);
 }
 
+function normalizeForwardedSubscription(input: unknown): string | null {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const source = input as Record<string, unknown>;
+  const notification = source.reporter_notification;
+  if (!notification || typeof notification !== "object" || Array.isArray(notification)) {
+    return null;
+  }
+  const preference = notification as Record<string, unknown>;
+  const email = clean(preference.email)?.toLowerCase() || null;
+  if (
+    preference.notify_on_resolution !== true
+    || !email
+    || email.length > 254
+    || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email)
+  ) return null;
+  return JSON.stringify({
+    reporter_notification: {
+      email,
+      notify_on_resolution: true,
+      consent_version: clean(preference.consent_version) || "v1",
+    },
+  });
+}
+
 /**
  * Create a Web Request/Response handler that applications can mount on the
  * same origin at `/api/mobile-bug-reports`, including `/policy`, `/mine`, and
@@ -355,12 +381,17 @@ export function createSameOriginBugReporterHandler<
       && pathParts[0] === "mine"
       && pathParts[1] === "archive-closed";
     const isSubmission = request.method === "POST" && pathParts.length === 0;
+    const isSubscription = request.method === "POST"
+      && pathParts.length === 3
+      && pathParts[0] === "bugs"
+      && pathParts[2] === "subscription";
     if (
       !isPolicy
       && !isHistory
       && !isLookup
       && !isArchive
       && !isArchiveClosed
+      && !isSubscription
       && !isSubmission
     ) {
       return new Response(null, {
@@ -371,7 +402,7 @@ export function createSameOriginBugReporterHandler<
 
     let body: string | undefined;
     let vanillaBody: string | undefined;
-    if (isSubmission) {
+    if (isSubmission || isSubscription) {
       const declaredLength = Number(request.headers.get("content-length"));
       if (Number.isFinite(declaredLength) && declaredLength > MAX_FORWARD_BODY_BYTES) {
         return forwardingJson(413, "report_too_large");
@@ -386,24 +417,27 @@ export function createSameOriginBugReporterHandler<
         return forwardingJson(413, "report_too_large");
       }
       try {
-        body = normalizeForwardedPayload(
-          JSON.parse(text),
-          projectId!,
-          environment!,
-        ) || undefined;
+        const parsed = JSON.parse(text);
+        body = (isSubscription
+          ? normalizeForwardedSubscription(parsed)
+          : normalizeForwardedPayload(parsed, projectId!, environment!)) || undefined;
       } catch {
         body = undefined;
       }
       if (!body) return forwardingJson(400, "invalid_report");
-      const vanillaPayload = JSON.parse(body) as Record<string, unknown>;
-      delete vanillaPayload.automation_requests;
-      vanillaBody = JSON.stringify(vanillaPayload);
+      if (isSubmission) {
+        const vanillaPayload = JSON.parse(body) as Record<string, unknown>;
+        delete vanillaPayload.automation_requests;
+        vanillaBody = JSON.stringify(vanillaPayload);
+      } else {
+        vanillaBody = body;
+      }
     }
 
     let endpoint: URL;
     if (isPolicy) endpoint = new URL(endpoints!.policy);
     else if (isHistory) endpoint = new URL(endpoints!.history);
-    else if (isLookup || isArchive) {
+    else if (isLookup || isArchive || isSubscription) {
       let bugId: string;
       try {
         bugId = decodeURIComponent(pathParts[1]).trim();
@@ -412,12 +446,12 @@ export function createSameOriginBugReporterHandler<
       }
       if (!bugId) return forwardingJson(404, "bug_history_not_found");
       endpoint = new URL(
-        `${endpoints!.bugs}/${encodeURIComponent(bugId)}${isArchive ? "/archive" : ""}`,
+        `${endpoints!.bugs}/${encodeURIComponent(bugId)}${isArchive ? "/archive" : isSubscription ? "/subscription" : ""}`,
       );
     } else if (isArchiveClosed) {
       endpoint = new URL(`${endpoints!.history}/archive-closed`);
     } else endpoint = new URL(endpoints!.reports);
-    if (isPolicy || isHistory || isLookup || isArchive || isArchiveClosed) {
+    if (isPolicy || isHistory || isLookup || isArchive || isArchiveClosed || isSubscription) {
       endpoint.searchParams.set("project_id", projectId!);
       endpoint.searchParams.set("environment", environment!);
     }
@@ -447,7 +481,7 @@ export function createSameOriginBugReporterHandler<
         applicationSessionToken = null;
       }
       const headers: Record<string, string> = { accept: "application/json" };
-      if (isSubmission) headers["content-type"] = "application/json";
+      if (isSubmission || isSubscription) headers["content-type"] = "application/json";
       if (reportTokenHeader === BUG_REPORT_TOKEN_HEADER) {
         headers[BUG_REPORT_TOKEN_HEADER] = reportToken!;
       } else {
@@ -458,13 +492,13 @@ export function createSameOriginBugReporterHandler<
       }
       try {
         upstream = await fetchImpl(endpoint, {
-          method: isSubmission
+          method: isSubmission || isSubscription
             ? "POST"
             : isArchive || isArchiveClosed
               ? request.method
               : "GET",
           headers,
-          body: isSubmission
+          body: isSubmission || isSubscription
             ? applicationSessionToken
               ? body
               : vanillaBody

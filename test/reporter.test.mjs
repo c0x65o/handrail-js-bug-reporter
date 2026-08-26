@@ -400,6 +400,74 @@ test("submission retries idempotently with fresh session headers and filtered au
   );
 });
 
+test("report-scoped notification opt-in is a separate request and cannot undo report acceptance", async () => {
+  const requests = [];
+  const reporter = createBugReporter(reporterConfig({
+    applicationSessionTokenProvider: () => "verified-session",
+    fetch: async (url, init) => {
+      requests.push({ url: String(url), init });
+      if (String(url).includes("/subscription")) {
+        return jsonResponse({
+          notification_subscription: {
+            active: true,
+            created: true,
+            recipient_hint: "r***@example.com",
+            subscribed_at: "2026-08-25T12:00:00.000Z",
+          },
+        }, 201);
+      }
+      return jsonResponse({ bug_id: "bug-notify-1" }, 201);
+    },
+  }));
+
+  const result = await reporter.submit({
+    title: "Checkout failure",
+    description: "Continue does not work.",
+    notification: {
+      email: " Reporter@Example.COM ",
+      notifyOnResolution: true,
+    },
+  });
+
+  assert.equal(requests.length, 2);
+  assert.equal(new URL(requests[0].url).pathname, "/api/mobile-bug-reports");
+  assert.equal(
+    new URL(requests[1].url).pathname,
+    "/api/mobile-bug-reports/bugs/bug-notify-1/subscription",
+  );
+  assert.equal(JSON.parse(requests[0].init.body).reporter_notification, undefined);
+  assert.deepEqual(JSON.parse(requests[1].init.body), {
+    reporter_notification: {
+      email: "reporter@example.com",
+      notify_on_resolution: true,
+      consent_version: "v1",
+    },
+  });
+  assert.equal(result.status, "submitted");
+  assert.equal(result.notificationSubscription.active, true);
+  assert.equal(result.notificationWarning, null);
+});
+
+test("notification failure is reported separately from a saved bug", async () => {
+  const reporter = createBugReporter(reporterConfig({
+    fetch: async (url) => String(url).includes("/subscription")
+      ? jsonResponse({ error: "temporary" }, 503)
+      : jsonResponse({ bug_id: "bug-notify-2" }, 201),
+  }));
+  const result = await reporter.submit({
+    title: "Checkout failure",
+    description: "Continue does not work.",
+    notification: {
+      email: "reporter@example.com",
+      notifyOnResolution: true,
+    },
+  });
+  assert.equal(result.status, "submitted");
+  assert.equal(result.bugId, "bug-notify-2");
+  assert.equal(result.notificationSubscription, null);
+  assert.match(result.notificationWarning, /report was sent/u);
+});
+
 test("verified reporters page and look up their bugs with fresh session headers", async () => {
   const calls = [];
   let sessionNumber = 0;

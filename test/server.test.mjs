@@ -240,6 +240,55 @@ test("same-origin forwarding scopes paged bug history and lookup to server-owned
   assert.equal(upstreamRequests.length, 2);
 });
 
+test("same-origin forwarding validates and isolates report notification consent", async () => {
+  const upstreamRequests = [];
+  const handler = createSameOriginBugReporterHandler(sharedConfig({
+    resolveApplicationSessionToken: () => "verified-notification-session",
+    fetch: async (url, init) => {
+      upstreamRequests.push({ url: String(url), init });
+      return jsonResponse({
+        notification_subscription: {
+          active: true,
+          created: true,
+          recipient_hint: "r***@example.com",
+          subscribed_at: "2026-08-25T12:00:00.000Z",
+        },
+      }, 201);
+    },
+  }));
+  const response = await handler(new Request(
+    "https://app.example/api/mobile-bug-reports/bugs/bug%2F1/subscription",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://app.example" },
+      body: JSON.stringify({
+        reporter_notification: {
+          email: " Reporter@Example.COM ",
+          notify_on_resolution: true,
+        },
+      }),
+    },
+  ));
+
+  assert.equal(response.status, 201);
+  assert.equal(upstreamRequests.length, 1);
+  assert.equal(
+    new URL(upstreamRequests[0].url).pathname,
+    "/api/mobile-bug-reports/bugs/bug%2F1/subscription",
+  );
+  assert.deepEqual(JSON.parse(upstreamRequests[0].init.body), {
+    reporter_notification: {
+      email: "reporter@example.com",
+      notify_on_resolution: true,
+      consent_version: "v1",
+    },
+  });
+  assert.equal(
+    upstreamRequests[0].init.headers[APPLICATION_SESSION_TOKEN_HEADER],
+    "verified-notification-session",
+  );
+});
+
 test("same-origin forwarding scopes archive, restore, and clear-closed mutations", async () => {
   const upstreamRequests = [];
   const handler = createSameOriginBugReporterHandler(sharedConfig({
