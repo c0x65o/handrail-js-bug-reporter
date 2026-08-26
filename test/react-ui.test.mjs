@@ -28,7 +28,7 @@ const reporterPolicy = {
   reporter_notifications: {
     available: true,
     recipient_hint: "j***@example.com",
-    lifecycles: ["fixed", "deployed"],
+    lifecycles: ["fixed"],
   },
 };
 
@@ -226,7 +226,7 @@ test("the packaged form delegates policy, screenshot, automation, and unchecked 
     ));
   });
 
-  const notification = renderer.root.findByProps({ "aria-label": "Email me when this bug is fixed or deployed" });
+  const notification = renderer.root.findByProps({ "aria-label": "Email me when this bug is fixed" });
   assert.equal(notification.props.checked, false);
   assert.match(JSON.stringify(renderer.toJSON()), /j\*\*\*@example\.com/);
 
@@ -252,8 +252,8 @@ test("the packaged form delegates policy, screenshot, automation, and unchecked 
   const checkboxes = renderer.root.findAll((node) => node.type === "input" && node.props.type === "checkbox");
   const automation = checkboxes.find((node) => node.props["aria-label"] === undefined);
   await act(async () => automation.props.onChange({ target: { checked: true } }));
-  await act(async () => renderer.root.findByProps({ "aria-label": "Email me when this bug is fixed or deployed" }).props.onChange({ target: { checked: true } }));
-  assert.equal(renderer.root.findByProps({ "aria-label": "Email me when this bug is fixed or deployed" }).props.checked, true);
+  await act(async () => renderer.root.findByProps({ "aria-label": "Email me when this bug is fixed" }).props.onChange({ target: { checked: true } }));
+  assert.equal(renderer.root.findByProps({ "aria-label": "Email me when this bug is fixed" }).props.checked, true);
 
   const reportForm = renderer.root.findAll((node) => node.type === "form")[0];
   await act(async () => reportForm.props.onSubmit({ preventDefault: () => undefined }));
@@ -282,7 +282,7 @@ test("the packaged form hides notification consent without a Known User email", 
     reporter_notifications: {
       available: false,
       recipient_hint: null,
-      lifecycles: ["fixed", "deployed"],
+      lifecycles: ["fixed"],
     },
   };
   let renderer;
@@ -294,7 +294,7 @@ test("the packaged form hides notification consent without a Known User email", 
     ));
   });
 
-  assert.equal(renderer.root.findAllByProps({ "aria-label": "Email me when this bug is fixed or deployed" }).length, 0);
+  assert.equal(renderer.root.findAllByProps({ "aria-label": "Email me when this bug is fixed" }).length, 0);
   assert.equal(renderer.root.findAllByProps({ type: "email" }).length, 0);
   await act(async () => renderer.unmount());
 });

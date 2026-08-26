@@ -13,7 +13,7 @@ const policy = {
   project_id: "project-123",
   environment: "staging",
   reporter: { identity_verified: true, access_level: "full_access" },
-  reporter_notifications: { available: true, recipient_hint: "r***@example.com", lifecycles: ["fixed", "deployed"] },
+  reporter_notifications: { available: true, recipient_hint: "r***@example.com", lifecycles: ["fixed"] },
   ask_options: [{ key: "fix", label: "Fix" }],
 };
 

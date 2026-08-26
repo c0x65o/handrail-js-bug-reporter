@@ -623,15 +623,15 @@ function BugReportForm(): ReactElement {
       <legend style={{ padding: "0 5px", fontWeight: 700 }}>Updates</legend>
       <label style={{ ...styles.checkboxLabel, marginTop: 0 }}>
         <input
-          aria-label="Email me when this bug is fixed or deployed"
+          aria-label="Email me when this bug is fixed"
           type="checkbox"
           checked={reporter.form.notifyOnResolution}
           onChange={(event) => reporter.updateForm({ notifyOnResolution: event.target.checked })}
         />
         <span>
-          <strong>Email me when this bug is fixed or deployed</strong>
+          <strong>Email me when this bug is fixed</strong>
           <span style={{ display: "block", marginTop: 2, color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>
-            Only updates for this bug{notificationEligibility?.recipientHint ? `, sent to ${notificationEligibility.recipientHint}` : ""}. Every email includes an unsubscribe link.
+            We’ll send one email after the fix is available in the environment you’re using{notificationEligibility?.recipientHint ? `, to ${notificationEligibility.recipientHint}` : ""}. It includes an unsubscribe link.
           </span>
         </span>
       </label>

@@ -73,8 +73,8 @@ await reporter.submit(
 
 ### Report update notifications
 
-Applications may offer an unchecked, report-scoped opt-in for Fixed and
-Deployed email updates:
+Applications may offer an unchecked, report-scoped **Email me when this is
+fixed** opt-in:
 
 ```ts
 const result = await reporter.submit({
@@ -97,8 +97,10 @@ an address. `recipientHint` contains safe display copy for the consent UI.
 
 The SDK saves the report first, then persists consent through the report's
 `/subscription` child route. A subscription failure cannot turn an accepted
-report into a submission error. Every lifecycle email includes a report-scoped
-unsubscribe link. Existing integrations remain compatible because
+report into a submission error. Handrail sends one email only after release
+evidence confirms the fix is available in the environment where the report
+originated. Internal Fixed and Deployed transitions do not each produce mail.
+The email includes a report-scoped unsubscribe link. Existing integrations remain compatible because
 `notification` is optional and the deprecated `email` field is ignored for
 recipient selection.
 

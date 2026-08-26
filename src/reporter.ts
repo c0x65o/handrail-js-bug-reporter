@@ -76,6 +76,7 @@ export interface BugReporterPolicy {
 export interface ReporterNotificationEligibility {
   readonly available: boolean;
   readonly recipientHint: string | null;
+  /** New Handrail servers advertise only fixed; deployed remains accepted for older servers. */
   readonly lifecycles: readonly ("fixed" | "deployed")[];
 }
 
@@ -99,7 +100,7 @@ export interface BugReportInput {
   readonly profileKey?: string;
   readonly metadata?: Readonly<Record<string, unknown>>;
   readonly screenshot?: ScreenshotAttachment;
-  /** Explicit report-scoped consent for Fixed and Deployed email updates. */
+  /** Explicit report-scoped consent for one email after the fix reaches the report environment. */
   readonly notification?: ReporterNotificationPreference;
 }
 

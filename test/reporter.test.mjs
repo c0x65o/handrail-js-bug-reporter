@@ -20,7 +20,7 @@ const validPolicy = {
   reporter_notifications: {
     available: true,
     recipient_hint: "r***@example.com",
-    lifecycles: ["fixed", "deployed"],
+    lifecycles: ["fixed"],
   },
   ask_options: [
     { key: "auto_verify", label: "Server-controlled label" },
