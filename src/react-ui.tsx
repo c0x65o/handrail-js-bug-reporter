@@ -5,6 +5,7 @@ import {
   useState,
   type CSSProperties,
   type ChangeEvent,
+  type ClipboardEvent as ReactClipboardEvent,
   type FormEvent,
   type KeyboardEvent,
   type ReactElement,
@@ -14,11 +15,12 @@ import {
   useHandrailBugReporter,
   type BugReporterTrackingQueryOptions,
 } from "./react";
-import type {
-  AutomationOptionKey,
-  BugTrackingStatusGroup,
-  BugTrackingVisibility,
-  TrackedBugRecord,
+import {
+  MAX_SCREENSHOT_BYTES,
+  type AutomationOptionKey,
+  type BugTrackingStatusGroup,
+  type BugTrackingVisibility,
+  type TrackedBugRecord,
 } from "./reporter";
 
 export type HandrailBugReporterThemeMode = "auto" | "light" | "dark";
@@ -517,21 +519,40 @@ function BugReportForm(): ReactElement {
     }
   }, [notificationsAvailable, reporter.form.notifyOnResolution, reporter.updateForm]);
 
-  const onScreenshot = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const attachScreenshot = (file: File): boolean => {
     setLocalError(null);
-    if (!file) return;
     if (file.type !== "image/png" && file.type !== "image/jpeg") {
-      reporter.removeScreenshot();
       setLocalError("Choose a PNG or JPEG screenshot.");
-      event.target.value = "";
-      return;
+      return false;
+    }
+    if (file.size > MAX_SCREENSHOT_BYTES) {
+      setLocalError("Choose a PNG or JPEG screenshot no larger than 20 MiB.");
+      return false;
     }
     reporter.replaceScreenshot({
       data: file,
       mimeType: file.type,
-      filename: file.name,
+      filename: file.name || (file.type === "image/png"
+        ? "clipboard-screenshot.png"
+        : "clipboard-screenshot.jpg"),
     });
+    return true;
+  };
+
+  const onScreenshot = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!attachScreenshot(file)) event.target.value = "";
+  };
+
+  const onPaste = (event: ReactClipboardEvent<HTMLFormElement>) => {
+    if (!reporter.canAttachScreenshot) return;
+    const file = Array.from(event.clipboardData.items)
+      .find((item) => item.kind === "file")
+      ?.getAsFile();
+    if (!file) return;
+    event.preventDefault();
+    attachScreenshot(file);
   };
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -548,7 +569,7 @@ function BugReportForm(): ReactElement {
     }
   };
 
-  return <form onSubmit={(event) => void onSubmit(event)}>
+  return <form onSubmit={(event) => void onSubmit(event)} onPaste={onPaste}>
     {localError && <div role="alert" style={{ ...styles.status, background: "var(--handrail-bug-danger-surface)", color: "var(--handrail-bug-danger-text)" }}>{localError}</div>}
     {message && <div role={message.role} aria-live="polite" style={{ ...styles.status, ...message.style }}>{message.text}</div>}
 
@@ -570,7 +591,7 @@ function BugReportForm(): ReactElement {
         maxLength={20_000}
         value={reporter.form.description}
         onChange={(event) => reporter.updateForm({ description: event.target.value })}
-        placeholder="What happened, and what did you expect?"
+        placeholder="What happened, and what did you expect? You can paste a screenshot here."
         style={{ ...styles.input, minHeight: 130, resize: "vertical" }}
       />
     </label>
@@ -598,7 +619,7 @@ function BugReportForm(): ReactElement {
         onChange={onScreenshot}
       />
       <div style={{ marginTop: 7, color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>
-        PNG or JPEG, up to 20 MiB. The SDK validates file content before sending.
+        Upload or paste one PNG or JPEG, up to 20 MiB. The SDK validates file content before sending.
       </div>
       {reporter.form.screenshot && <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
         <span>{reporter.form.screenshot.filename || "Attached screenshot"}</span>

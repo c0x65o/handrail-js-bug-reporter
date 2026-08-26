@@ -428,7 +428,8 @@ export function App() {
 
 The dialog delegates all policy, validation, submission, notification, and
 history operations to the same headless provider described below. It includes
-the bug form, one validated PNG/JPEG screenshot, policy-derived Ask controls,
+the bug form, one validated PNG/JPEG screenshot by upload or direct clipboard
+paste, policy-derived Ask controls,
 an unchecked report-scoped update consent control when the verified user is
 eligible, and an owned **My bugs** view with search, status/visibility/sort
 filters, keyset pagination, archive, restore, and **Clear closed**.

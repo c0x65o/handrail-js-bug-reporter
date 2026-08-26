@@ -200,7 +200,7 @@ test("appearance tokens, dialog semantics, focus containment, Escape, and focus 
   }
 });
 
-test("the packaged form delegates policy, screenshot, automation, and unchecked notification consent to the headless provider", async () => {
+test("the packaged form delegates uploads, direct screenshot paste, policy, automation, and unchecked notification consent", async () => {
   const requests = [];
   const fetch = async (url, init) => {
     requests.push({ url: String(url), init });
@@ -248,6 +248,23 @@ test("the packaged form delegates policy, screenshot, automation, and unchecked 
   Object.defineProperty(png, "name", { value: "checkout.png" });
   await act(async () => invalidFileInput.props.onChange({ target: { files: [png], value: "checkout.png" } }));
   assert.equal(renderer.root.findAllByProps({ children: "checkout.png" }).length, 1);
+
+  const pastedPng = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])], { type: "image/png" });
+  Object.defineProperty(pastedPng, "name", { value: "clipboard.png" });
+  const pasteTargets = renderer.root.findAll((node) => (
+    typeof node.type === "string" && typeof node.props.onPaste === "function"
+  ));
+  assert.equal(pasteTargets.length, 1, "paste should be handled at one form boundary");
+  let prevented = 0;
+  await act(async () => pasteTargets[0].props.onPaste({
+    clipboardData: {
+      items: [{ kind: "file", type: "image/png", getAsFile: () => pastedPng }],
+    },
+    preventDefault: () => { prevented += 1; },
+  }));
+  assert.equal(prevented, 1);
+  assert.equal(renderer.root.findAllByProps({ children: "clipboard.png" }).length, 1);
+  assert.equal(renderer.root.findAllByProps({ children: "checkout.png" }).length, 0);
 
   const checkboxes = renderer.root.findAll((node) => node.type === "input" && node.props.type === "checkbox");
   const automation = checkboxes.find((node) => node.props["aria-label"] === undefined);
