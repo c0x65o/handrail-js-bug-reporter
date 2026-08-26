@@ -444,15 +444,16 @@ email updates were enabled, keeps notification failure separate from report
 success, and offers **Report another bug** and **Done** actions.
 
 `appearance.themeMode` accepts `auto`, `light`, or `dark`. `auto` is the
-default and inherits the host color scheme and typography. Override any of
-these typed tokens without changing reporter behavior:
+default and follows the host color scheme while supplying a polished,
+high-contrast SDK palette and system typography. Override any of these typed
+tokens without changing reporter behavior:
 
 - `accent`, `accentText`
 - `surface`, `surfaceMuted`, `text`, `mutedText`, `border`, `overlay`
 - `dangerSurface`, `dangerText`, `successSurface`, `successText`
 - `radius`, `fontFamily`
 
-The stable dialog uses most of the available viewport (up to 1120 × 900 px),
+The stable dialog uses most of the available viewport (up to 1280 × 960 px),
 keeps the same dimensions while switching between the report and history tabs,
 and scrolls its content within that fixed shell. The same values are installed
 as scoped `--handrail-bug-*` CSS variables on
@@ -461,6 +462,12 @@ targets the overlay for application-specific integration. The dialog has an
 accessible name and description, contains Tab focus, closes on Escape or an
 overlay click, restores launcher focus, announces loading/errors/success in
 text, and bounds itself to the available viewport.
+
+The packaged history view uses the same appearance contract and provides a
+structured issue list, semantic status badges, active/archived visibility,
+status counts, search, sort, dismiss/restore actions, and bounded pagination.
+Applications can brand it with tokens, but do not need to rebuild those
+controls to get the production-ready default presentation.
 
 Use `HandrailBugReporterDialog` directly when the application owns its own
 launcher. Its required `open` and `onClose` props make the mounting decision

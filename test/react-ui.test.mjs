@@ -64,6 +64,10 @@ function trackedBug(id, archived = false) {
     severity: "sev3",
     environment: "staging",
     status: "reported",
+    status_group: "in_progress",
+    reported_app_version: "1.2.3",
+    reported_app_flavor: null,
+    reported_route: "/checkout",
     status_rollup: {
       stage: "submitted",
       label: "Submitted",
@@ -105,6 +109,8 @@ test("the packaged UI is opt-in and the launcher mounts a separate dialog", asyn
   const overlay = renderer.root.findByProps({ "data-handrail-bug-reporter": "overlay" });
   assert.equal(overlay.props["data-theme"], "auto");
   assert.equal(overlay.props.style.colorScheme, "inherit");
+  assert.equal(overlay.props.style["--handrail-bug-accent"], "light-dark(#2563eb, #78a9ff)");
+  assert.match(overlay.props.style["--handrail-bug-font-family"], /Segoe UI/u);
 
   await act(async () => renderer.root.findByProps({ "aria-label": "Close bug reporter" }).props.onClick());
   assert.equal(renderer.root.findAllByProps({ role: "dialog" }).length, 0);
@@ -173,8 +179,8 @@ test("appearance tokens, dialog semantics, focus containment, Escape, and focus 
     assert.equal(dialog.props["aria-modal"], "true");
     assert.ok(dialog.props["aria-labelledby"]);
     assert.ok(dialog.props["aria-describedby"]);
-    assert.equal(dialog.props.style.width, "min(1120px, calc(100vw - 24px))");
-    assert.equal(dialog.props.style.height, "min(900px, calc(100dvh - 24px))");
+    assert.equal(dialog.props.style.width, "min(1280px, calc(100vw - 32px))");
+    assert.equal(dialog.props.style.height, "min(960px, calc(100dvh - 32px))");
     assert.equal(fakeDocument.activeElement, first);
 
     let prevented = false;
@@ -411,12 +417,28 @@ test("My bugs uses the provider history, filter, archive, restore, and clear-clo
       return jsonResponse({ contract_version: "v1", bug_id: "bug-1", archived: false, archived_at: null });
     }
     if (init.method === "POST") return jsonResponse({ contract_version: "v1", archived_count: 1 });
+    const closedBug = trackedBug("bug-closed");
     return jsonResponse({
       contract_version: "v1",
-      bugs: [trackedBug("bug-1", archived)],
-      summary: { total: 1, needs_attention: 0, in_progress: 1, closed: 0, not_reproduced: 0 },
+      bugs: [
+        trackedBug("bug-1", archived),
+        {
+          ...closedBug,
+          status: "fixed",
+          status_group: "closed",
+          status_rollup: {
+            ...closedBug.status_rollup,
+            stage: "fixed",
+            label: "Fixed",
+            terminal: true,
+            raw_status: "fixed",
+            workflow_state: "fixed",
+          },
+        },
+      ],
+      summary: { total: 2, needs_attention: 0, in_progress: 1, closed: 1, not_reproduced: 0 },
       query: { search: null, status_group: null, sort: "newest", visibility: "active" },
-      pagination: { limit: 20, filtered_count: 1, has_more: false, next_cursor: null },
+      pagination: { limit: 20, filtered_count: 2, has_more: false, next_cursor: null },
     });
   };
   let renderer;
@@ -428,13 +450,18 @@ test("My bugs uses the provider history, filter, archive, restore, and clear-clo
     ));
   });
 
-  const myBugsTab = renderer.root.findAllByProps({ role: "tab" }).find((node) => node.children.join("") === "My bugs");
-  await act(async () => myBugsTab.props.onClick());
-  assert.equal(renderer.root.findAllByType("article").length, 1);
+  const myBugsTab = renderer.root.findAllByProps({ role: "tab" })[1];
+  await act(async () => {
+    myBugsTab.props.onClick();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  assert.equal(renderer.root.findAllByType("article").length, 2);
+  assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-history": "true" }).length, 1);
+  assert.equal(renderer.root.findByProps({ "aria-label": "Filter bugs by status" }).props.role, "group");
 
-  await act(async () => renderer.root.findByProps({ children: "Archive" }).props.onClick());
+  await act(async () => renderer.root.findByProps({ "aria-label": "Dismiss Bug bug-1" }).props.onClick());
   assert.equal(archived, true);
-  await act(async () => renderer.root.findByProps({ children: "Restore" }).props.onClick());
+  await act(async () => renderer.root.findByProps({ "aria-label": "Restore Bug bug-1" }).props.onClick());
   assert.equal(archived, false);
 
   const search = renderer.root.findByProps({ "aria-label": "Search my bugs" });
@@ -443,7 +470,7 @@ test("My bugs uses the provider history, filter, archive, restore, and clear-clo
   await act(async () => historyForm.props.onSubmit({ preventDefault: () => undefined }));
   assert.ok(requests.some((request) => request.url.includes("search=checkout")));
 
-  await act(async () => renderer.root.findByProps({ children: "Clear closed" }).props.onClick());
+  await act(async () => renderer.root.findByProps({ children: "Clear closed (1)" }).props.onClick());
   assert.ok(requests.some((request) => request.method === "POST" && request.url.includes("archive-closed")));
   assert.ok(requests.some((request) => request.method === "PUT"));
   assert.ok(requests.some((request) => request.method === "DELETE"));
