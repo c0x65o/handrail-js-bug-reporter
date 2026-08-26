@@ -17,6 +17,11 @@ const validPolicy = {
     identity_verified: true,
     access_level: "full_access",
   },
+  reporter_notifications: {
+    available: true,
+    recipient_hint: "r***@example.com",
+    lifecycles: ["fixed", "deployed"],
+  },
   ask_options: [
     { key: "auto_verify", label: "Server-controlled label" },
     { key: "fix", label: "Fix this issue" },
@@ -424,7 +429,6 @@ test("report-scoped notification opt-in is a separate request and cannot undo re
     title: "Checkout failure",
     description: "Continue does not work.",
     notification: {
-      email: " Reporter@Example.COM ",
       notifyOnResolution: true,
     },
   });
@@ -438,7 +442,6 @@ test("report-scoped notification opt-in is a separate request and cannot undo re
   assert.equal(JSON.parse(requests[0].init.body).reporter_notification, undefined);
   assert.deepEqual(JSON.parse(requests[1].init.body), {
     reporter_notification: {
-      email: "reporter@example.com",
       notify_on_resolution: true,
       consent_version: "v1",
     },
@@ -458,7 +461,6 @@ test("notification failure is reported separately from a saved bug", async () =>
     title: "Checkout failure",
     description: "Continue does not work.",
     notification: {
-      email: "reporter@example.com",
       notifyOnResolution: true,
     },
   });

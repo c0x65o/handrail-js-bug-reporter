@@ -13,6 +13,7 @@ const policy = {
   project_id: "project-123",
   environment: "staging",
   reporter: { identity_verified: true, access_level: "full_access" },
+  reporter_notifications: { available: true, recipient_hint: "r***@example.com", lifecycles: ["fixed", "deployed"] },
   ask_options: [{ key: "fix", label: "Fix" }],
 };
 
@@ -263,7 +264,6 @@ test("same-origin forwarding validates and isolates report notification consent"
       headers: { "content-type": "application/json", origin: "https://app.example" },
       body: JSON.stringify({
         reporter_notification: {
-          email: " Reporter@Example.COM ",
           notify_on_resolution: true,
         },
       }),
@@ -278,7 +278,6 @@ test("same-origin forwarding validates and isolates report notification consent"
   );
   assert.deepEqual(JSON.parse(upstreamRequests[0].init.body), {
     reporter_notification: {
-      email: "reporter@example.com",
       notify_on_resolution: true,
       consent_version: "v1",
     },

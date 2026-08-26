@@ -1,0 +1,329 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+process.env.NODE_ENV = "test";
+const { createElement } = await import("react");
+const { act, create } = await import("react-test-renderer");
+const {
+  HandrailBugReporterButton,
+  HandrailBugReporterDialog,
+  HandrailBugReporterProvider,
+} = await import("@handrail/bug-reporter/react");
+
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+function jsonResponse(body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+const reporterPolicy = {
+  schema_version: 1,
+  project_id: "project-123",
+  environment: "staging",
+  reporter: { identity_verified: true, access_level: "full_access" },
+  ask_options: [{ key: "fix", label: "Fix" }],
+  reporter_notifications: {
+    available: true,
+    recipient_hint: "j***@example.com",
+    lifecycles: ["fixed", "deployed"],
+  },
+};
+
+function config(fetch, extra = {}) {
+  return {
+    apiBaseUrl: "https://handrail.example/api",
+    projectId: "project-123",
+    environment: "staging",
+    reportToken: "public-token",
+    applicationSessionTokenProvider: () => "current-session",
+    allowScreenshots: true,
+    fetch,
+    ...extra,
+  };
+}
+
+function renderInsideProvider(child, providerProps = {}) {
+  return createElement(
+    HandrailBugReporterProvider,
+    {
+      config: config(async () => jsonResponse(reporterPolicy)),
+      loadPolicyOnMount: false,
+      ...providerProps,
+    },
+    child,
+  );
+}
+
+function trackedBug(id, archived = false) {
+  return {
+    id,
+    title: `Bug ${id}`,
+    severity: "sev3",
+    environment: "staging",
+    status: "reported",
+    status_rollup: {
+      stage: "submitted",
+      label: "Submitted",
+      terminal: false,
+      raw_status: "reported",
+      workflow_state: "reported",
+      environment: null,
+      version: null,
+      updated_at: "2026-08-13T18:00:00.000Z",
+    },
+    archived,
+    archived_at: archived ? "2026-08-14T18:00:00.000Z" : null,
+    occurrence_count: 1,
+    reporter_occurrence_count: 1,
+    first_reported_at: "2026-08-13T18:00:00.000Z",
+    last_reported_at: "2026-08-13T18:00:00.000Z",
+    created_at: "2026-08-13T18:00:00.000Z",
+    updated_at: "2026-08-13T18:00:00.000Z",
+    fixed_at: null,
+    closed_at: null,
+  };
+}
+
+test("the packaged UI is opt-in and the launcher mounts a separate dialog", async () => {
+  let renderer;
+  await act(async () => {
+    renderer = create(renderInsideProvider(
+      createElement(HandrailBugReporterButton, { label: "Send bug" }),
+    ));
+  });
+
+  assert.equal(renderer.root.findAllByProps({ role: "dialog" }).length, 0);
+  const launcher = renderer.root.findByProps({ "aria-haspopup": "dialog" });
+  assert.equal(launcher.props["aria-expanded"], false);
+
+  await act(async () => launcher.props.onClick());
+  assert.equal(renderer.root.findAllByProps({ role: "dialog" }).length, 1);
+  assert.equal(renderer.root.findByProps({ "aria-haspopup": "dialog" }).props["aria-expanded"], true);
+
+  await act(async () => renderer.root.findByProps({ "aria-label": "Close bug reporter" }).props.onClick());
+  assert.equal(renderer.root.findAllByProps({ role: "dialog" }).length, 0);
+  await act(async () => renderer.unmount());
+});
+
+test("appearance tokens, dialog semantics, focus containment, Escape, and focus restoration are wired", async () => {
+  const originals = {
+    document: globalThis.document,
+    HTMLElement: globalThis.HTMLElement,
+    requestAnimationFrame: globalThis.requestAnimationFrame,
+    cancelAnimationFrame: globalThis.cancelAnimationFrame,
+  };
+  let fakeDocument;
+  class MockElement {
+    constructor(name) {
+      this.name = name;
+      this.attributes = new Map();
+    }
+    focus() {
+      fakeDocument.activeElement = this;
+    }
+    getAttribute(name) {
+      return this.attributes.get(name) || null;
+    }
+  }
+  const previous = new MockElement("previous");
+  const first = new MockElement("first");
+  const last = new MockElement("last");
+  const dialogNode = new MockElement("dialog");
+  dialogNode.querySelector = () => first;
+  dialogNode.querySelectorAll = () => [first, last];
+  fakeDocument = { activeElement: previous };
+  globalThis.document = fakeDocument;
+  globalThis.HTMLElement = MockElement;
+  globalThis.requestAnimationFrame = (callback) => {
+    callback(0);
+    return 1;
+  };
+  globalThis.cancelAnimationFrame = () => undefined;
+
+  let closed = 0;
+  let renderer;
+  try {
+    await act(async () => {
+      renderer = create(
+        renderInsideProvider(createElement(HandrailBugReporterDialog, {
+          open: true,
+          onClose: () => { closed += 1; },
+          appearance: {
+            themeMode: "dark",
+            tokens: { accent: "#ff00aa", radius: "4px" },
+          },
+        })),
+        { createNodeMock: (element) => element.type === "section" ? dialogNode : new MockElement(String(element.type)) },
+      );
+    });
+
+    const overlay = renderer.root.findByProps({ "data-handrail-bug-reporter": "overlay" });
+    assert.equal(overlay.props["data-theme"], "dark");
+    assert.equal(overlay.props.style["--handrail-bug-accent"], "#ff00aa");
+    assert.equal(overlay.props.style["--handrail-bug-radius"], "4px");
+    assert.equal(overlay.props.style.colorScheme, "dark");
+
+    const dialog = renderer.root.findByProps({ role: "dialog" });
+    assert.equal(dialog.props["aria-modal"], "true");
+    assert.ok(dialog.props["aria-labelledby"]);
+    assert.ok(dialog.props["aria-describedby"]);
+    assert.equal(fakeDocument.activeElement, first);
+
+    let prevented = false;
+    fakeDocument.activeElement = last;
+    dialog.props.onKeyDown({ key: "Tab", shiftKey: false, preventDefault: () => { prevented = true; } });
+    assert.equal(prevented, true);
+    assert.equal(fakeDocument.activeElement, first);
+
+    prevented = false;
+    fakeDocument.activeElement = first;
+    dialog.props.onKeyDown({ key: "Tab", shiftKey: true, preventDefault: () => { prevented = true; } });
+    assert.equal(prevented, true);
+    assert.equal(fakeDocument.activeElement, last);
+
+    dialog.props.onKeyDown({ key: "Escape", shiftKey: false, preventDefault: () => undefined });
+    assert.equal(closed, 1);
+
+    await act(async () => renderer.unmount());
+    assert.equal(fakeDocument.activeElement, previous);
+  } finally {
+    globalThis.document = originals.document;
+    globalThis.HTMLElement = originals.HTMLElement;
+    globalThis.requestAnimationFrame = originals.requestAnimationFrame;
+    globalThis.cancelAnimationFrame = originals.cancelAnimationFrame;
+  }
+});
+
+test("the packaged form delegates policy, screenshot, automation, and unchecked notification consent to the headless provider", async () => {
+  const requests = [];
+  const fetch = async (url, init) => {
+    requests.push({ url: String(url), init });
+    if (init.method === "GET") return jsonResponse(reporterPolicy);
+    if (String(url).endsWith("/subscription")) {
+      return jsonResponse({
+        notification_subscription: {
+          active: true,
+          created: true,
+          recipient_hint: "j***@example.com",
+          subscribed_at: "2026-08-26T14:00:00.000Z",
+        },
+      }, 201);
+    }
+    return jsonResponse({ bug_id: "bug-ui-1" }, 201);
+  };
+  let renderer;
+  await act(async () => {
+    renderer = create(createElement(
+      HandrailBugReporterProvider,
+      { config: config(fetch) },
+      createElement(HandrailBugReporterDialog, { open: true, onClose: () => undefined }),
+    ));
+  });
+
+  const notification = renderer.root.findByProps({ "aria-label": "Email me when this bug is fixed or deployed" });
+  assert.equal(notification.props.checked, false);
+  assert.match(JSON.stringify(renderer.toJSON()), /j\*\*\*@example\.com/);
+
+  const inputs = renderer.root.findAll((node) => node.type === "input");
+  const title = inputs.find((node) => node.props.placeholder === "What went wrong?");
+  const details = renderer.root.find((node) => node.type === "textarea");
+  await act(async () => {
+    title.props.onChange({ target: { value: "Checkout is blocked" } });
+    details.props.onChange({ target: { value: "Continue does not respond." } });
+  });
+
+  const invalidFileInput = renderer.root.findByProps({ "aria-label": "Attach screenshot" });
+  await act(async () => invalidFileInput.props.onChange({
+    target: { files: [{ type: "image/gif", name: "bad.gif" }], value: "bad.gif" },
+  }));
+  assert.match(renderer.root.findByProps({ role: "alert" }).children.join(""), /PNG or JPEG/);
+
+  const png = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])], { type: "image/png" });
+  Object.defineProperty(png, "name", { value: "checkout.png" });
+  await act(async () => invalidFileInput.props.onChange({ target: { files: [png], value: "checkout.png" } }));
+  assert.equal(renderer.root.findAllByProps({ children: "checkout.png" }).length, 1);
+
+  const checkboxes = renderer.root.findAll((node) => node.type === "input" && node.props.type === "checkbox");
+  const automation = checkboxes.find((node) => node.props["aria-label"] === undefined);
+  await act(async () => {
+    automation.props.onChange({ target: { checked: true } });
+    notification.props.onChange({ target: { checked: true } });
+  });
+
+  const reportForm = renderer.root.findAll((node) => node.type === "form")[0];
+  await act(async () => reportForm.props.onSubmit({ preventDefault: () => undefined }));
+
+  const submitRequest = requests.find((request) => request.init.method === "POST" && !request.url.endsWith("/subscription"));
+  const submitted = JSON.parse(submitRequest.init.body);
+  assert.equal(submitted.title, "Checkout is blocked");
+  assert.equal(submitted.description, "Continue does not respond.");
+  assert.equal(submitted.screenshot_mime_type, "image/png");
+  assert.deepEqual(submitted.automation_requests, { fix: true });
+  const subscription = requests.find((request) => request.url.endsWith("/subscription"));
+  assert.ok(subscription);
+  assert.deepEqual(JSON.parse(subscription.init.body), {
+    reporter_notification: {
+      notify_on_resolution: true,
+      consent_version: "v1",
+    },
+  });
+  assert.match(renderer.root.findByProps({ role: "status" }).children.join(""), /submitted successfully/i);
+  await act(async () => renderer.unmount());
+});
+
+test("My bugs uses the provider history, filter, archive, restore, and clear-closed actions", async () => {
+  const requests = [];
+  let archived = false;
+  const fetch = async (url, init) => {
+    const request = { url: String(url), method: init.method };
+    requests.push(request);
+    if (init.method === "PUT") {
+      archived = true;
+      return jsonResponse({ contract_version: "v1", bug_id: "bug-1", archived: true, archived_at: "2026-08-26T14:00:00.000Z" });
+    }
+    if (init.method === "DELETE") {
+      archived = false;
+      return jsonResponse({ contract_version: "v1", bug_id: "bug-1", archived: false, archived_at: null });
+    }
+    if (init.method === "POST") return jsonResponse({ contract_version: "v1", archived_count: 1 });
+    return jsonResponse({
+      contract_version: "v1",
+      bugs: [trackedBug("bug-1", archived)],
+      summary: { total: 1, needs_attention: 0, in_progress: 1, closed: 0, not_reproduced: 0 },
+      query: { search: null, status_group: null, sort: "newest", visibility: "active" },
+      pagination: { limit: 20, filtered_count: 1, has_more: false, next_cursor: null },
+    });
+  };
+  let renderer;
+  await act(async () => {
+    renderer = create(createElement(
+      HandrailBugReporterProvider,
+      { config: config(fetch), loadPolicyOnMount: false },
+      createElement(HandrailBugReporterDialog, { open: true, onClose: () => undefined }),
+    ));
+  });
+
+  const myBugsTab = renderer.root.findAllByProps({ role: "tab" }).find((node) => node.children.join("") === "My bugs");
+  await act(async () => myBugsTab.props.onClick());
+  assert.equal(renderer.root.findAllByType("article").length, 1);
+
+  await act(async () => renderer.root.findByProps({ children: "Archive" }).props.onClick());
+  assert.equal(archived, true);
+  await act(async () => renderer.root.findByProps({ children: "Restore" }).props.onClick());
+  assert.equal(archived, false);
+
+  const search = renderer.root.findByProps({ "aria-label": "Search my bugs" });
+  await act(async () => search.props.onChange({ target: { value: "checkout" } }));
+  const historyForm = renderer.root.findAll((node) => node.type === "form")[0];
+  await act(async () => historyForm.props.onSubmit({ preventDefault: () => undefined }));
+  assert.ok(requests.some((request) => request.url.includes("search=checkout")));
+
+  await act(async () => renderer.root.findByProps({ children: "Clear closed" }).props.onClick());
+  assert.ok(requests.some((request) => request.method === "POST" && request.url.includes("archive-closed")));
+  assert.ok(requests.some((request) => request.method === "PUT"));
+  assert.ok(requests.some((request) => request.method === "DELETE"));
+  await act(async () => renderer.unmount());
+});

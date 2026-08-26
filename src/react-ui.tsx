@@ -153,7 +153,7 @@ function appearanceVariables(
     "--handrail-bug-success-text": tokens.successText,
     "--handrail-bug-radius": tokens.radius,
     "--handrail-bug-font-family": tokens.fontFamily,
-    colorScheme: mode === "auto" ? "normal" : mode,
+    colorScheme: mode === "auto" ? "inherit" : mode,
     ...appearance?.style,
   };
 }
@@ -268,7 +268,7 @@ const styles: Record<string, CSSProperties> = {
   status: { marginBottom: 14, borderRadius: 9, padding: "10px 12px", fontSize: 13 },
   historyControls: {
     display: "grid",
-    gridTemplateColumns: "minmax(150px, 1fr) repeat(3, minmax(110px, auto))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
     gap: 8,
     marginBottom: 14,
   },
@@ -605,11 +605,11 @@ function BugReportForm({ onSubmitted }: { readonly onSubmitted: () => void }): R
           checked={reporter.form.automationRequests.includes(option.key)}
           onChange={(event) => reporter.setAutomationRequest(option.key as AutomationOptionKey, event.target.checked)}
         />
-        <span><strong>{option.label}</strong>{option.description && <span style={{ display: "block", marginTop: 2, color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>{option.description}</span>}</span>
+        <span><strong>{option.label}</strong></span>
       </label>)}
     </fieldset>}
 
-    <fieldset style={styles.fieldset}>
+    {reporter.policy?.reporterNotifications.available && <fieldset style={styles.fieldset}>
       <legend style={{ padding: "0 5px", fontWeight: 700 }}>Updates</legend>
       <label style={{ ...styles.checkboxLabel, marginTop: 0 }}>
         <input
@@ -620,22 +620,12 @@ function BugReportForm({ onSubmitted }: { readonly onSubmitted: () => void }): R
         />
         <span>
           <strong>Email me when this bug is fixed or deployed</strong>
-          <span style={{ display: "block", marginTop: 2, color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>Only updates for this bug. Every email includes an unsubscribe link.</span>
+          <span style={{ display: "block", marginTop: 2, color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>
+            Only updates for this bug{reporter.policy.reporterNotifications.recipientHint ? `, sent to ${reporter.policy.reporterNotifications.recipientHint}` : ""}. Every email includes an unsubscribe link.
+          </span>
         </span>
       </label>
-      {reporter.form.notifyOnResolution && <label style={{ ...styles.label, margin: "12px 0 0" }}>
-        Email address
-        <input
-          required
-          type="email"
-          autoComplete="email"
-          maxLength={254}
-          value={reporter.form.notificationEmail}
-          onChange={(event) => reporter.updateForm({ notificationEmail: event.target.value })}
-          style={styles.input}
-        />
-      </label>}
-    </fieldset>
+    </fieldset>}
 
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 9, marginTop: 20 }}>
       {reporter.submission.status === "submitted" && <button type="button" onClick={() => { reporter.resetSubmission(); reporter.updateForm({ title: "", description: "", screenshot: null, automationRequests: [], notifyOnResolution: false }); }} style={buttonStyle("secondary")}>Report another</button>}
@@ -717,7 +707,7 @@ export function HandrailBugReporterDialog({
   return <div
     data-handrail-bug-reporter="overlay"
     data-theme={appearance?.themeMode || "auto"}
-    style={{ ...variables, ...styles.overlay }}
+    style={{ ...styles.overlay, ...variables }}
     onMouseDown={(event) => {
       if (event.target === event.currentTarget) onClose();
     }}
