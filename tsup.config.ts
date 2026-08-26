@@ -4,7 +4,7 @@ export default defineConfig({
   entry: {
     index: "src/index.ts",
     server: "src/server.ts",
-    react: "src/react.ts",
+    react: "src/react-entry.ts",
   },
   clean: true,
   dts: true,

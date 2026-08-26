@@ -152,7 +152,6 @@ export interface BugReporterFormState {
   readonly screenshot: ScreenshotAttachment | null;
   readonly automationRequests: readonly AutomationOptionKey[];
   readonly notifyOnResolution: boolean;
-  readonly notificationEmail: string;
 }
 
 export type BugReporterPolicyStatus =
@@ -267,7 +266,6 @@ function initialFormState(
     screenshot: initial?.screenshot || null,
     automationRequests: Object.freeze([...(initial?.automationRequests || [])]),
     notifyOnResolution: initial?.notifyOnResolution === true,
-    notificationEmail: initial?.notificationEmail || "",
   };
 }
 
@@ -419,7 +417,6 @@ export function HandrailBugReporterProvider({
         ...(form.notifyOnResolution
           ? {
               notification: {
-                email: form.notificationEmail,
                 notifyOnResolution: true,
               } satisfies ReporterNotificationPreference,
             }

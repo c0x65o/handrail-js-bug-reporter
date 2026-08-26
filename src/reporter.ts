@@ -69,6 +69,13 @@ export interface BugReporterPolicy {
   readonly identityVerified: true;
   readonly accessLevel: ReporterAccessLevel;
   readonly askOptions: readonly AutomationOption[];
+  readonly reporterNotifications: ReporterNotificationEligibility;
+}
+
+export interface ReporterNotificationEligibility {
+  readonly available: boolean;
+  readonly recipientHint: string | null;
+  readonly lifecycles: readonly ("fixed" | "deployed")[];
 }
 
 export interface ScreenshotAttachment {
@@ -96,9 +103,10 @@ export interface BugReportInput {
 }
 
 export interface ReporterNotificationPreference {
-  readonly email: string;
   readonly notifyOnResolution: true;
   readonly consentVersion?: "v1" | string;
+  /** @deprecated The server derives the recipient from the verified Known User identity. */
+  readonly email?: string;
 }
 
 export interface ReporterNotificationSubscription {
@@ -1408,13 +1416,9 @@ export class HandrailBugReporterClient {
       );
     }
     const normalizedBugId = cleanString(bugId);
-    const email = cleanString(preference?.email)?.toLowerCase() || null;
     if (
       !normalizedBugId
       || preference?.notifyOnResolution !== true
-      || !email
-      || email.length > 254
-      || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email)
     ) {
       throw new BugReporterError(
         "invalid_report",
@@ -1427,7 +1431,6 @@ export class HandrailBugReporterClient {
     );
     const body = JSON.stringify({
       reporter_notification: {
-        email,
         notify_on_resolution: true,
         consent_version: cleanString(preference.consentVersion) || "v1",
       },
@@ -1792,6 +1795,16 @@ export class HandrailBugReporterClient {
     const askOptions = Object.freeze(
       AUTOMATION_OPTIONS.filter((option) => optionKeys.has(option.key)),
     );
+    const notificationRecord = plainRecord(body.reporter_notifications);
+    const notificationAvailable = notificationRecord?.available === true;
+    const recipientHint = notificationAvailable
+      ? nullableString(notificationRecord?.recipient_hint)
+      : null;
+    const lifecycles = Array.isArray(notificationRecord?.lifecycles)
+      ? notificationRecord.lifecycles.filter((value): value is "fixed" | "deployed" => (
+          value === "fixed" || value === "deployed"
+        ))
+      : [];
     return Object.freeze({
       schemaVersion: 1,
       projectId: this.projectId!,
@@ -1799,6 +1812,11 @@ export class HandrailBugReporterClient {
       identityVerified: true,
       accessLevel,
       askOptions,
+      reporterNotifications: Object.freeze({
+        available: notificationAvailable,
+        recipientHint,
+        lifecycles: Object.freeze([...lifecycles]),
+      }),
     });
   }
 

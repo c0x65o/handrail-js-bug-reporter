@@ -281,16 +281,9 @@ function normalizeForwardedSubscription(input: unknown): string | null {
     return null;
   }
   const preference = notification as Record<string, unknown>;
-  const email = clean(preference.email)?.toLowerCase() || null;
-  if (
-    preference.notify_on_resolution !== true
-    || !email
-    || email.length > 254
-    || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email)
-  ) return null;
+  if (preference.notify_on_resolution !== true) return null;
   return JSON.stringify({
     reporter_notification: {
-      email,
       notify_on_resolution: true,
       consent_version: clean(preference.consent_version) || "v1",
     },
