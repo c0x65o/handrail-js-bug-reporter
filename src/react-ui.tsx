@@ -479,6 +479,9 @@ function BugHistory(): ReactElement {
           {busyBugId === "__closed__" ? "Clearing…" : "Clear closed"}
         </button>
       </div>
+      <div style={{ marginBottom: 12, color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>
+        Archive and Clear closed only hide bugs from your list; they do not change or delete the product team's bug record.
+      </div>
     </form>
 
     {historyActionError && <div role="alert" style={{ ...styles.status, background: "var(--handrail-bug-danger-surface)", color: "var(--handrail-bug-danger-text)" }}>{historyActionError}</div>}
@@ -501,10 +504,18 @@ function BugHistory(): ReactElement {
   </section>;
 }
 
-function BugReportForm({ onSubmitted }: { readonly onSubmitted: () => void }): ReactElement {
+function BugReportForm(): ReactElement {
   const reporter = useHandrailBugReporter();
   const [localError, setLocalError] = useState<string | null>(null);
   const message = submissionMessage(reporter.submission);
+  const notificationEligibility = reporter.policy?.reporterNotifications;
+  const notificationsAvailable = notificationEligibility?.available === true;
+
+  useEffect(() => {
+    if (!notificationsAvailable && reporter.form.notifyOnResolution) {
+      reporter.updateForm({ notifyOnResolution: false });
+    }
+  }, [notificationsAvailable, reporter.form.notifyOnResolution, reporter.updateForm]);
 
   const onScreenshot = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -531,8 +542,7 @@ function BugReportForm({ onSubmitted }: { readonly onSubmitted: () => void }): R
       return;
     }
     try {
-      const result = await reporter.submit();
-      if (result.status === "submitted") onSubmitted();
+      await reporter.submit();
     } catch {
       // The provider exposes a redacted, presentation-safe error state.
     }
@@ -609,7 +619,7 @@ function BugReportForm({ onSubmitted }: { readonly onSubmitted: () => void }): R
       </label>)}
     </fieldset>}
 
-    {reporter.policy?.reporterNotifications.available && <fieldset style={styles.fieldset}>
+    {notificationsAvailable && <fieldset style={styles.fieldset}>
       <legend style={{ padding: "0 5px", fontWeight: 700 }}>Updates</legend>
       <label style={{ ...styles.checkboxLabel, marginTop: 0 }}>
         <input
@@ -621,7 +631,7 @@ function BugReportForm({ onSubmitted }: { readonly onSubmitted: () => void }): R
         <span>
           <strong>Email me when this bug is fixed or deployed</strong>
           <span style={{ display: "block", marginTop: 2, color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>
-            Only updates for this bug{reporter.policy.reporterNotifications.recipientHint ? `, sent to ${reporter.policy.reporterNotifications.recipientHint}` : ""}. Every email includes an unsubscribe link.
+            Only updates for this bug{notificationEligibility?.recipientHint ? `, sent to ${notificationEligibility.recipientHint}` : ""}. Every email includes an unsubscribe link.
           </span>
         </span>
       </label>
@@ -649,6 +659,10 @@ export function HandrailBugReporterDialog({
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const headingId = useId();
   const descriptionId = useId();
+  const reportTabId = useId();
+  const historyTabId = useId();
+  const reportPanelId = useId();
+  const historyPanelId = useId();
 
   useEffect(() => {
     if (!open || typeof document === "undefined") return;
@@ -732,12 +746,12 @@ export function HandrailBugReporterDialog({
       </header>
       <div style={styles.content}>
         {showHistory && <div role="tablist" aria-label="Bug reporter views" style={styles.tabs}>
-          <button type="button" role="tab" aria-selected={tab === "report"} onClick={() => selectTab("report")} style={{ ...styles.tab, ...(tab === "report" ? styles.activeTab : {}) }}>Report bug</button>
-          <button type="button" role="tab" aria-selected={tab === "history"} onClick={() => selectTab("history")} style={{ ...styles.tab, ...(tab === "history" ? styles.activeTab : {}) }}>My bugs</button>
+          <button id={reportTabId} type="button" role="tab" aria-controls={reportPanelId} aria-selected={tab === "report"} tabIndex={tab === "report" ? 0 : -1} onClick={() => selectTab("report")} style={{ ...styles.tab, ...(tab === "report" ? styles.activeTab : {}) }}>Report bug</button>
+          <button id={historyTabId} type="button" role="tab" aria-controls={historyPanelId} aria-selected={tab === "history"} tabIndex={tab === "history" ? 0 : -1} onClick={() => selectTab("history")} style={{ ...styles.tab, ...(tab === "history" ? styles.activeTab : {}) }}>My bugs</button>
         </div>}
         {tab === "report"
-          ? <BugReportForm onSubmitted={() => undefined} />
-          : <BugHistory />}
+          ? <div id={reportPanelId} role={showHistory ? "tabpanel" : undefined} aria-labelledby={showHistory ? reportTabId : undefined}><BugReportForm /></div>
+          : <div id={historyPanelId} role="tabpanel" aria-labelledby={historyTabId}><BugHistory /></div>}
       </div>
     </section>
   </div>;

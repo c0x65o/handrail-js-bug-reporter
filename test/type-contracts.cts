@@ -30,3 +30,24 @@ void disabledBugHistory;
 void requestReporter;
 void react.HandrailBugReporterProvider;
 void react.useHandrailBugReporter;
+void react.HandrailBugReporterButton;
+void react.HandrailBugReporterDialog;
+
+const packagedAppearance: react.HandrailBugReporterAppearance = {
+  themeMode: "light",
+  tokens: { accent: "#175cd3" },
+};
+const packagedButtonProps: react.HandrailBugReporterButtonProps = {
+  appearance: packagedAppearance,
+};
+const packagedDialogProps: react.HandrailBugReporterDialogProps = {
+  open: true,
+  onClose: () => undefined,
+};
+void packagedButtonProps;
+void packagedDialogProps;
+
+const legacyHeadlessInitialForm: Partial<react.BugReporterFormState> = {
+  notifyOnResolution: true,
+};
+void legacyHeadlessInitialForm;

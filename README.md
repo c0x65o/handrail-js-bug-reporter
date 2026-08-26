@@ -1,8 +1,9 @@
 # @handrail/bug-reporter
 
 Framework-neutral JavaScript bug-reporting primitives for Handrail. The package
-has separate browser, Node/server, and headless React entry points and stamps
-reports with immutable SDK release identity.
+has separate browser and Node/server entry points plus a React entry point with
+both a headless controller and explicitly mounted packaged UI. Every runtime
+stamps reports with immutable SDK release identity.
 
 ## Installation
 
@@ -80,7 +81,6 @@ const result = await reporter.submit({
   title: "Checkout button does not respond",
   description: "Clicking Continue has no visible effect.",
   notification: {
-    email: currentUser.email,
     notifyOnResolution: true,
   },
 });
@@ -90,11 +90,17 @@ if (result.status === "submitted" && result.notificationWarning) {
 }
 ```
 
+Only offer this control when policy discovery returns
+`policy.reporterNotifications?.available === true`. Handrail derives the
+recipient from the verified Known User session; callers do not collect or send
+an address. `recipientHint` contains safe display copy for the consent UI.
+
 The SDK saves the report first, then persists consent through the report's
-`/subscription` child route. It never puts the email address in the bug payload.
-A subscription failure cannot turn an accepted report into a submission error.
-Every lifecycle email includes a report-scoped unsubscribe link. Existing
-integrations are unchanged because `notification` is optional.
+`/subscription` child route. A subscription failure cannot turn an accepted
+report into a submission error. Every lifecycle email includes a report-scoped
+unsubscribe link. Existing integrations remain compatible because
+`notification` is optional and the deprecated `email` field is ignored for
+recipient selection.
 
 The direct browser provider example applies only when the application already
 exposes a browser-readable session token. Use the same-origin forwarding
@@ -378,13 +384,81 @@ deployed.
 Each successful submission result also exposes `bugId`, allowing a caller to
 retain the canonical identity and later pass it to `getBug`.
 
+### Packaged React UI
+
+The packaged UI is opt-in. Importing or upgrading the package never injects a
+launcher, dialog, stylesheet, global listener, or portal. An application must
+mount `HandrailBugReporterButton` or control
+`HandrailBugReporterDialog` itself:
+
+```tsx
+import { useMemo } from "react";
+import {
+  HandrailBugReporterButton,
+  HandrailBugReporterProvider,
+} from "@handrail/bug-reporter/react";
+
+export function App() {
+  const config = useMemo(() => ({
+    apiBaseUrl: "/api",
+    projectId: "your-immutable-project-id",
+    environment: "staging",
+    transport: "same-origin" as const,
+    allowScreenshots: true,
+  }), []);
+
+  return (
+    <HandrailBugReporterProvider
+      config={config}
+      initialForm={{ route: window.location.pathname }}
+    >
+      <HandrailBugReporterButton
+        label="Report a bug"
+        appearance={{
+          themeMode: "auto",
+          tokens: { accent: "var(--app-accent)", radius: "8px" },
+        }}
+      />
+    </HandrailBugReporterProvider>
+  );
+}
+```
+
+The dialog delegates all policy, validation, submission, notification, and
+history operations to the same headless provider described below. It includes
+the bug form, one validated PNG/JPEG screenshot, policy-derived Ask controls,
+an unchecked report-scoped update consent control when the verified user is
+eligible, and an owned **My bugs** view with search, status/visibility/sort
+filters, keyset pagination, archive, restore, and **Clear closed**.
+
+`appearance.themeMode` accepts `auto`, `light`, or `dark`. `auto` is the
+default and inherits the host color scheme and typography. Override any of
+these typed tokens without changing reporter behavior:
+
+- `accent`, `accentText`
+- `surface`, `surfaceMuted`, `text`, `mutedText`, `border`, `overlay`
+- `dangerSurface`, `dangerText`, `successSurface`, `successText`
+- `radius`, `fontFamily`
+
+The same values are installed as scoped `--handrail-bug-*` CSS variables on
+the overlay. `appearance.className` targets the dialog and `appearance.style`
+targets the overlay for application-specific integration. The dialog has an
+accessible name and description, contains Tab focus, closes on Escape or an
+overlay click, restores launcher focus, announces loading/errors/success in
+text, and bounds itself to the available viewport.
+
+Use `HandrailBugReporterDialog` directly when the application owns its own
+launcher. Its required `open` and `onClose` props make the mounting decision
+explicit. Set `showHistory={false}` when only submission should be packaged.
+
 ### Headless React adoption
 
-The React entry point owns state but renders no UI, injects no global widget,
-and ships no shared CSS. The host application owns its modal/page/drawer,
-launcher, theme, components, copy, responsive behavior, and accessibility.
-Keep the configuration object stable so the provider represents one reporter
-instance:
+The same React entry point retains its renderless controller for applications
+that own a larger bug-tracking experience. The provider itself renders no UI,
+injects no global widget, and ships no shared CSS. The host application owns
+its modal/page/drawer, launcher, theme, components, copy, responsive behavior,
+and accessibility. Keep the configuration object stable so the provider
+represents one reporter instance:
 
 ```tsx
 import { useMemo } from "react";

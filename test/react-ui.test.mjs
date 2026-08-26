@@ -102,6 +102,9 @@ test("the packaged UI is opt-in and the launcher mounts a separate dialog", asyn
   await act(async () => launcher.props.onClick());
   assert.equal(renderer.root.findAllByProps({ role: "dialog" }).length, 1);
   assert.equal(renderer.root.findByProps({ "aria-haspopup": "dialog" }).props["aria-expanded"], true);
+  const overlay = renderer.root.findByProps({ "data-handrail-bug-reporter": "overlay" });
+  assert.equal(overlay.props["data-theme"], "auto");
+  assert.equal(overlay.props.style.colorScheme, "inherit");
 
   await act(async () => renderer.root.findByProps({ "aria-label": "Close bug reporter" }).props.onClick());
   assert.equal(renderer.root.findAllByProps({ role: "dialog" }).length, 0);
@@ -202,7 +205,7 @@ test("the packaged form delegates policy, screenshot, automation, and unchecked 
   const fetch = async (url, init) => {
     requests.push({ url: String(url), init });
     if (init.method === "GET") return jsonResponse(reporterPolicy);
-    if (String(url).endsWith("/subscription")) {
+    if (String(url).includes("/subscription")) {
       return jsonResponse({
         notification_subscription: {
           active: true,
@@ -248,21 +251,20 @@ test("the packaged form delegates policy, screenshot, automation, and unchecked 
 
   const checkboxes = renderer.root.findAll((node) => node.type === "input" && node.props.type === "checkbox");
   const automation = checkboxes.find((node) => node.props["aria-label"] === undefined);
-  await act(async () => {
-    automation.props.onChange({ target: { checked: true } });
-    notification.props.onChange({ target: { checked: true } });
-  });
+  await act(async () => automation.props.onChange({ target: { checked: true } }));
+  await act(async () => renderer.root.findByProps({ "aria-label": "Email me when this bug is fixed or deployed" }).props.onChange({ target: { checked: true } }));
+  assert.equal(renderer.root.findByProps({ "aria-label": "Email me when this bug is fixed or deployed" }).props.checked, true);
 
   const reportForm = renderer.root.findAll((node) => node.type === "form")[0];
   await act(async () => reportForm.props.onSubmit({ preventDefault: () => undefined }));
 
-  const submitRequest = requests.find((request) => request.init.method === "POST" && !request.url.endsWith("/subscription"));
+  const submitRequest = requests.find((request) => request.init.method === "POST" && !request.url.includes("/subscription"));
   const submitted = JSON.parse(submitRequest.init.body);
   assert.equal(submitted.title, "Checkout is blocked");
   assert.equal(submitted.description, "Continue does not respond.");
   assert.equal(submitted.screenshot_mime_type, "image/png");
   assert.deepEqual(submitted.automation_requests, { fix: true });
-  const subscription = requests.find((request) => request.url.endsWith("/subscription"));
+  const subscription = requests.find((request) => request.url.includes("/subscription"));
   assert.ok(subscription);
   assert.deepEqual(JSON.parse(subscription.init.body), {
     reporter_notification: {
@@ -271,6 +273,29 @@ test("the packaged form delegates policy, screenshot, automation, and unchecked 
     },
   });
   assert.match(renderer.root.findByProps({ role: "status" }).children.join(""), /submitted successfully/i);
+  await act(async () => renderer.unmount());
+});
+
+test("the packaged form hides notification consent without a Known User email", async () => {
+  const unavailablePolicy = {
+    ...reporterPolicy,
+    reporter_notifications: {
+      available: false,
+      recipient_hint: null,
+      lifecycles: ["fixed", "deployed"],
+    },
+  };
+  let renderer;
+  await act(async () => {
+    renderer = create(createElement(
+      HandrailBugReporterProvider,
+      { config: config(async () => jsonResponse(unavailablePolicy)) },
+      createElement(HandrailBugReporterDialog, { open: true, onClose: () => undefined }),
+    ));
+  });
+
+  assert.equal(renderer.root.findAllByProps({ "aria-label": "Email me when this bug is fixed or deployed" }).length, 0);
+  assert.equal(renderer.root.findAllByProps({ type: "email" }).length, 0);
   await act(async () => renderer.unmount());
 });
 

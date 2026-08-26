@@ -69,7 +69,8 @@ export interface BugReporterPolicy {
   readonly identityVerified: true;
   readonly accessLevel: ReporterAccessLevel;
   readonly askOptions: readonly AutomationOption[];
-  readonly reporterNotifications: ReporterNotificationEligibility;
+  /** Present when the policy endpoint advertises verified-user notification eligibility. */
+  readonly reporterNotifications?: ReporterNotificationEligibility;
 }
 
 export interface ReporterNotificationEligibility {

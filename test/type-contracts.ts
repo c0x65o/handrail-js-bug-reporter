@@ -21,12 +21,18 @@ import {
   stampReport as stampServerReport,
 } from "@handrail/bug-reporter/server";
 import {
+  HandrailBugReporterButton,
+  HandrailBugReporterDialog,
   HandrailBugReporterProvider,
   HandrailBugReporterIdentityProvider,
   SDK_IDENTITY as reactIdentity,
   stampReport as stampReactReport,
   useHandrailBugReporter,
   useHandrailBugReporterIdentity,
+  type HandrailBugReporterAppearance,
+  type HandrailBugReporterButtonProps,
+  type HandrailBugReporterDialogProps,
+  type BugReporterFormState,
 } from "@handrail/bug-reporter/react";
 
 const browserReport = stampBrowserReport({ title: "Browser issue" } as const);
@@ -56,6 +62,30 @@ void HandrailBugReporterIdentityProvider;
 void useHandrailBugReporterIdentity;
 void HandrailBugReporterProvider;
 void useHandrailBugReporter;
+void HandrailBugReporterButton;
+void HandrailBugReporterDialog;
+
+const packagedAppearance: HandrailBugReporterAppearance = {
+  themeMode: "auto",
+  tokens: { accent: "#175cd3", radius: "8px" },
+};
+const packagedButtonProps: HandrailBugReporterButtonProps = {
+  label: "Report a bug",
+  appearance: packagedAppearance,
+};
+const packagedDialogProps: HandrailBugReporterDialogProps = {
+  open: true,
+  onClose: () => undefined,
+  appearance: { themeMode: "dark" },
+  showHistory: true,
+};
+void packagedButtonProps;
+void packagedDialogProps;
+
+const legacyHeadlessInitialForm: Partial<BugReporterFormState> = {
+  notifyOnResolution: true,
+};
+void legacyHeadlessInitialForm;
 
 type AppRequest = { readonly applicationSessionToken?: string };
 const requestReporters = createRequestScopedBugReporter<AppRequest>({

@@ -153,6 +153,14 @@ test("package exports resolve for ESM and CommonJS", async () => {
       assert.equal(typeof loaded.stampReport, "function");
     }
   }
+
+  const reactEsm = await import("@handrail/bug-reporter/react");
+  const reactCjs = require("@handrail/bug-reporter/react");
+  for (const loaded of [reactEsm, reactCjs]) {
+    assert.equal(typeof loaded.HandrailBugReporterButton, "function");
+    assert.equal(typeof loaded.HandrailBugReporterDialog, "function");
+    assert.equal(typeof loaded.HandrailBugReporterProvider, "function");
+  }
 });
 
 test("all emitted JavaScript has valid syntax", () => {
