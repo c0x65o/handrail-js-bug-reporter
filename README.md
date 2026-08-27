@@ -487,7 +487,8 @@ tokens without changing reporter behavior:
 Configuration tokens are mapped to scoped CSS custom properties. For host
 theme systems that already work in variables, `appearance.style` also accepts
 the typed `--handrail-bug-*` properties directly; direct values take precedence
-over `appearance.tokens`.
+over `appearance.tokens`. The built-in launcher installs the same configured
+tokens on itself, so its default primary treatment matches the dialog.
 
 The stable dialog uses most of the available viewport (up to 1560 × 960 px),
 keeps the same dimensions while switching between the report and history tabs,

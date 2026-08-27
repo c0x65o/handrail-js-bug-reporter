@@ -246,6 +246,7 @@ const focusableSelector = [
 
 function appearanceVariables(
   appearance: HandrailBugReporterAppearance | undefined,
+  includeIntegrationStyle = true,
 ): UiVariables {
   const mode = appearance?.themeMode || "auto";
   const base = mode === "dark"
@@ -274,7 +275,7 @@ function appearanceVariables(
     "--handrail-bug-radius": tokens.radius,
     "--handrail-bug-font-family": tokens.fontFamily,
     colorScheme: mode === "auto" ? "inherit" : mode,
-    ...appearance?.style,
+    ...(includeIntegrationStyle ? appearance?.style : undefined),
   };
 }
 
@@ -346,12 +347,12 @@ const styles: Record<string, CSSProperties> = {
     flex: 1,
     appearance: "none",
     WebkitAppearance: "none",
-    border: "1px solid transparent",
+    border: "1px solid var(--handrail-bug-border)",
     borderRadius: 8,
     padding: "7px 12px",
     cursor: "pointer",
     color: "var(--handrail-bug-muted-text)",
-    background: "transparent",
+    background: "var(--handrail-bug-surface)",
     font: "inherit",
     fontWeight: 700,
     minHeight: 36,
@@ -1456,7 +1457,7 @@ export function HandrailBugReporterButton({
     <button
       type="button"
       className={className}
-      style={style || buttonStyle("primary")}
+      style={style || { ...appearanceVariables(dialogProps.appearance, false), ...buttonStyle("primary") }}
       aria-haspopup="dialog"
       aria-expanded={open}
       onClick={() => setOpen(true)}

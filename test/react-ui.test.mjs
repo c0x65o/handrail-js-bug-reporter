@@ -102,6 +102,8 @@ test("the packaged UI is opt-in and the launcher mounts a separate dialog", asyn
   assert.equal(renderer.root.findAllByProps({ role: "dialog" }).length, 0);
   const launcher = renderer.root.findByProps({ "aria-haspopup": "dialog" });
   assert.equal(launcher.props["aria-expanded"], false);
+  assert.equal(launcher.props.style["--handrail-bug-accent"], "light-dark(#2563eb, #78a9ff)");
+  assert.equal(launcher.props.style.background, "var(--handrail-bug-accent)");
 
   await act(async () => launcher.props.onClick());
   assert.equal(renderer.root.findAllByProps({ role: "dialog" }).length, 1);
@@ -110,16 +112,18 @@ test("the packaged UI is opt-in and the launcher mounts a separate dialog", asyn
   assert.equal(overlay.props["data-theme"], "auto");
   assert.equal(overlay.props.style.colorScheme, "inherit");
   assert.equal(overlay.props.style["--handrail-bug-accent"], "light-dark(#2563eb, #78a9ff)");
+  assert.equal(overlay.props.style["--handrail-bug-warning-text"], "light-dark(#b54708, #fbc46d)");
+  assert.equal(overlay.props.style["--handrail-bug-info-text"], "light-dark(#175cd3, #a7c7ff)");
   assert.match(overlay.props.style["--handrail-bug-font-family"], /Segoe UI/u);
   const dialogCss = renderer.root.findByType("style").children.join("");
   assert.match(dialogCss, /button \{\s+appearance: none;/u);
   assert.match(dialogCss, /:focus-visible \{\s+outline: 2px solid var\(--handrail-bug-accent\) !important;/u);
   const [reportTab, historyTab] = renderer.root.findAllByProps({ role: "tab" });
   assert.equal(reportTab.props.style.WebkitAppearance, "none");
-  assert.equal(reportTab.props.style.color, "var(--handrail-bug-accent)");
-  assert.match(reportTab.props.style.background, /var\(--handrail-bug-accent\) 9%/u);
+  assert.equal(reportTab.props.style.color, "var(--handrail-bug-accent-text)");
+  assert.equal(reportTab.props.style.background, "var(--handrail-bug-accent)");
   assert.equal(historyTab.props.style.color, "var(--handrail-bug-muted-text)");
-  assert.equal(historyTab.props.style.background, "transparent");
+  assert.equal(historyTab.props.style.background, "var(--handrail-bug-surface)");
 
   await act(async () => renderer.root.findByProps({ "aria-label": "Close bug reporter" }).props.onClick());
   assert.equal(renderer.root.findAllByProps({ role: "dialog" }).length, 0);
@@ -172,6 +176,7 @@ test("appearance tokens, dialog semantics, focus containment, Escape, and focus 
           appearance: {
             themeMode: "dark",
             tokens: { accent: "#ff00aa", radius: "4px" },
+            style: { "--handrail-bug-accent": "#b93815" },
           },
         })),
         { createNodeMock: (element) => element.type === "section" ? dialogNode : new MockElement(String(element.type)) },
@@ -180,7 +185,7 @@ test("appearance tokens, dialog semantics, focus containment, Escape, and focus 
 
     const overlay = renderer.root.findByProps({ "data-handrail-bug-reporter": "overlay" });
     assert.equal(overlay.props["data-theme"], "dark");
-    assert.equal(overlay.props.style["--handrail-bug-accent"], "#ff00aa");
+    assert.equal(overlay.props.style["--handrail-bug-accent"], "#b93815");
     assert.equal(overlay.props.style["--handrail-bug-radius"], "4px");
     assert.equal(overlay.props.style.colorScheme, "dark");
 
@@ -188,8 +193,8 @@ test("appearance tokens, dialog semantics, focus containment, Escape, and focus 
     assert.equal(dialog.props["aria-modal"], "true");
     assert.ok(dialog.props["aria-labelledby"]);
     assert.ok(dialog.props["aria-describedby"]);
-    assert.equal(dialog.props.style.width, "min(1280px, calc(100vw - 40px))");
-    assert.equal(dialog.props.style.height, "min(900px, calc(100dvh - 40px))");
+    assert.equal(dialog.props.style.width, "min(1560px, calc(100vw - 24px))");
+    assert.equal(dialog.props.style.height, "min(960px, calc(100dvh - 16px))");
     assert.equal(fakeDocument.activeElement, first);
 
     let prevented = false;
@@ -488,27 +493,27 @@ test("My bugs uses the provider history, filter, archive, restore, and clear-clo
   assert.equal(renderer.root.findAllByType("article").length, 2);
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-history": "true" }).length, 1);
   assert.equal(renderer.root.findByProps({ "aria-label": "Filter bugs by status" }).props.role, "group");
-  assert.equal(renderer.root.findByProps({ role: "dialog" }).props.style.height, "min(900px, calc(100dvh - 40px))");
+  assert.equal(renderer.root.findByProps({ role: "dialog" }).props.style.height, "min(960px, calc(100dvh - 16px))");
   assert.equal(renderer.root.findByProps({ role: "table" }).props["aria-label"], "Reported bugs");
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-history-row": "true" }).length, 2);
   const [, selectedMyBugsTab] = renderer.root.findAllByProps({ role: "tab" });
-  assert.equal(selectedMyBugsTab.props.style.color, "var(--handrail-bug-accent)");
-  assert.match(selectedMyBugsTab.props.style.background, /var\(--handrail-bug-accent\) 9%/u);
+  assert.equal(selectedMyBugsTab.props.style.color, "var(--handrail-bug-accent-text)");
+  assert.equal(selectedMyBugsTab.props.style.background, "var(--handrail-bug-accent)");
   const visibilityButtons = renderer.root.findByProps({ "aria-label": "Bug history visibility" }).findAllByType("button");
   assert.equal(visibilityButtons[0].props.style.color, "var(--handrail-bug-accent)");
   assert.equal(visibilityButtons[1].props.style.color, "var(--handrail-bug-muted-text)");
   const filtersButton = renderer.root.findByProps({ children: "Filters" });
   assert.equal(filtersButton.props["aria-expanded"], true);
-  assert.match(filtersButton.props.style.background, /var\(--handrail-bug-accent\) 9%/u);
+  assert.match(filtersButton.props.style.background, /var\(--handrail-bug-accent\) 8%/u);
   const clearClosedButton = renderer.root.findByProps({ children: "Clear closed (1)" });
-  assert.match(clearClosedButton.props.style.border, /var\(--handrail-bug-danger-text\)/u);
-  assert.equal(clearClosedButton.props.style.background, "var(--handrail-bug-danger-surface)");
+  assert.equal(clearClosedButton.props.style.border, 0);
+  assert.equal(clearClosedButton.props.style.background, "transparent");
   const viewButton = renderer.root.findByProps({ "aria-label": "View Bug bug-1" });
   const dismissButton = renderer.root.findByProps({ "aria-label": "Dismiss Bug bug-1" });
-  assert.equal(viewButton.props.style.background, "var(--handrail-bug-surface)");
-  assert.equal(dismissButton.props.style.background, "var(--handrail-bug-surface-muted)");
-  assert.notEqual(viewButton.props.style.border, 0);
-  assert.notEqual(dismissButton.props.style.border, 0);
+  assert.equal(viewButton.props.style.background, "transparent");
+  assert.equal(dismissButton.props.style.background, "transparent");
+  assert.equal(viewButton.props.style.border, 0);
+  assert.equal(dismissButton.props.style.border, 0);
   await act(async () => viewButton.props.onClick());
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-history-detail": "true" }).length, 1);
   assert.deepEqual(renderer.root.findByProps({ "aria-label": "Bug history visibility" }).findAllByType("button").map((button) => button.children.join("")), ["Active", "Archived"]);
