@@ -179,8 +179,8 @@ test("appearance tokens, dialog semantics, focus containment, Escape, and focus 
     assert.equal(dialog.props["aria-modal"], "true");
     assert.ok(dialog.props["aria-labelledby"]);
     assert.ok(dialog.props["aria-describedby"]);
-    assert.equal(dialog.props.style.width, "min(1280px, calc(100vw - 32px))");
-    assert.equal(dialog.props.style.height, "min(960px, calc(100dvh - 32px))");
+    assert.equal(dialog.props.style.width, "min(720px, calc(100vw - 28px))");
+    assert.equal(dialog.props.style.height, "min(780px, calc(100dvh - 28px))");
     assert.equal(fakeDocument.activeElement, first);
 
     let prevented = false;
@@ -242,16 +242,18 @@ test("the packaged form delegates upload, paste, drop, thumbnail, policy, automa
   assert.match(JSON.stringify(renderer.toJSON()), /j\*\*\*@example\.com/);
 
   const inputs = renderer.root.findAll((node) => node.type === "input");
-  const title = inputs.find((node) => node.props.placeholder === "What went wrong?");
-  const details = renderer.root.find((node) => node.type === "textarea");
+  const title = inputs.find((node) => node.props.placeholder === "What is broken?");
+  const details = renderer.root.findByProps({ placeholder: "Describe what you expected and what happened instead. You can paste a screenshot here." });
+  const reproducer = renderer.root.findByProps({ placeholder: "1. Open…  2. Click…  3. See…" });
   await act(async () => {
     title.props.onChange({ target: { value: "Checkout is blocked" } });
     details.props.onChange({ target: { value: "Continue does not respond." } });
+    reproducer.props.onChange({ target: { value: "1. Open checkout. 2. Click Continue." } });
   });
 
   const invalidFileInput = renderer.root.findByProps({ "aria-label": "Attach screenshot" });
   assert.equal(invalidFileInput.props.hidden, true);
-  assert.equal(renderer.root.findAllByProps({ children: "Add screenshot" }).length, 1);
+  assert.equal(renderer.root.findAllByProps({ "aria-label": "Add or paste a screenshot" }).length, 1);
   await act(async () => invalidFileInput.props.onChange({
     target: { files: [{ type: "image/gif", name: "bad.gif" }], value: "bad.gif" },
   }));
@@ -313,6 +315,7 @@ test("the packaged form delegates upload, paste, drop, thumbnail, policy, automa
   const submitted = JSON.parse(submitRequest.init.body);
   assert.equal(submitted.title, "Checkout is blocked");
   assert.equal(submitted.description, "Continue does not respond.");
+  assert.equal(submitted.reproducer, "1. Open checkout. 2. Click Continue.");
   assert.equal(submitted.screenshot_mime_type, "image/png");
   assert.deepEqual(submitted.automation_requests, { fix: true });
   const subscription = requests.find((request) => request.url.includes("/subscription"));
@@ -329,11 +332,11 @@ test("the packaged form delegates upload, paste, drop, thumbnail, policy, automa
   assert.equal(renderer.root.findAll((node) => (
     node.children.join("") === "Email updates are enabled for j***@example.com."
   )).length, 1);
-  assert.equal(renderer.root.findAllByProps({ placeholder: "What went wrong?" }).length, 0);
+  assert.equal(renderer.root.findAllByProps({ placeholder: "What is broken?" }).length, 0);
   assert.equal(renderer.root.findAll((node) => node.type === "textarea").length, 0);
 
   await act(async () => renderer.root.findByProps({ children: "Report another bug" }).props.onClick());
-  assert.equal(renderer.root.findByProps({ placeholder: "What went wrong?" }).props.value, "");
+  assert.equal(renderer.root.findByProps({ placeholder: "What is broken?" }).props.value, "");
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-submission-success": "true" }).length, 0);
   await act(async () => renderer.unmount());
 });
@@ -359,10 +362,10 @@ test("a notification failure still shows a thank-you screen and clearly confirms
   });
 
   await act(async () => {
-    renderer.root.findByProps({ placeholder: "What went wrong?" }).props.onChange({
+    renderer.root.findByProps({ placeholder: "What is broken?" }).props.onChange({
       target: { value: "Saved but notification failed" },
     });
-    renderer.root.find((node) => node.type === "textarea").props.onChange({
+    renderer.root.findByProps({ placeholder: "Describe what you expected and what happened instead. You can paste a screenshot here." }).props.onChange({
       target: { value: "The report must remain successful." },
     });
     renderer.root.findByProps({ "aria-label": "Email me when this bug is fixed" }).props.onChange({
@@ -375,7 +378,7 @@ test("a notification failure still shows a thank-you screen and clearly confirms
 
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-submission-success": "true" }).length, 1);
   assert.match(renderer.root.findByProps({ role: "alert" }).children.join(""), /bug is saved/i);
-  assert.equal(renderer.root.findAllByProps({ placeholder: "What went wrong?" }).length, 0);
+  assert.equal(renderer.root.findAllByProps({ placeholder: "What is broken?" }).length, 0);
   await act(async () => renderer.unmount());
 });
 
@@ -458,6 +461,8 @@ test("My bugs uses the provider history, filter, archive, restore, and clear-clo
   assert.equal(renderer.root.findAllByType("article").length, 2);
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-history": "true" }).length, 1);
   assert.equal(renderer.root.findByProps({ "aria-label": "Filter bugs by status" }).props.role, "group");
+  assert.equal(renderer.root.findByProps({ role: "dialog" }).props.style.height, "min(872px, calc(100dvh - 28px))");
+  assert.deepEqual(renderer.root.findByProps({ "aria-label": "Bug history visibility" }).findAllByType("button").map((button) => button.children.join("")), ["Active", "Archived"]);
 
   await act(async () => renderer.root.findByProps({ "aria-label": "Dismiss Bug bug-1" }).props.onClick());
   assert.equal(archived, true);
@@ -466,8 +471,7 @@ test("My bugs uses the provider history, filter, archive, restore, and clear-clo
 
   const search = renderer.root.findByProps({ "aria-label": "Search my bugs" });
   await act(async () => search.props.onChange({ target: { value: "checkout" } }));
-  const historyForm = renderer.root.findAll((node) => node.type === "form")[0];
-  await act(async () => historyForm.props.onSubmit({ preventDefault: () => undefined }));
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 350)));
   assert.ok(requests.some((request) => request.url.includes("search=checkout")));
 
   await act(async () => renderer.root.findByProps({ children: "Clear closed (1)" }).props.onClick());
