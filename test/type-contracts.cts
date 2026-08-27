@@ -10,6 +10,8 @@ const reactRuntime: "react" = react.SDK_IDENTITY.reporter_sdk_runtime;
 const reporter = core.createBugReporter({
   enabled: false,
 });
+const canonicalImpact: core.BugImpact = "moderate";
+const storedSeverity: core.HandrailBugSeverity = "sev3";
 const disabledSubmission = reporter.submit({
   title: "CommonJS browser issue",
   description: "Details",
@@ -28,6 +30,8 @@ void reactRuntime;
 void disabledSubmission;
 void disabledBugHistory;
 void requestReporter;
+void canonicalImpact;
+void storedSeverity;
 void react.HandrailBugReporterProvider;
 void react.useHandrailBugReporter;
 void react.HandrailBugReporterButton;

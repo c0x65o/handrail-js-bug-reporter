@@ -260,7 +260,10 @@ function initialFormState(
   return {
     title: initial?.title || "",
     description: initial?.description || "",
-    impact: normalizeBugImpact(initial?.impact ?? initial?.severity) || "moderate",
+    impact:
+      normalizeBugImpact(initial?.impact)
+      || normalizeBugImpact(initial?.severity)
+      || "moderate",
     severity: initial?.severity,
     route: initial?.route,
     appVersion: initial?.appVersion,
@@ -372,7 +375,16 @@ export function HandrailBugReporterProvider({
   }, [applyPolicy, loadPolicyOnMount, reporter]);
 
   const updateForm = useCallback((patch: Partial<BugReporterFormState>) => {
-    setForm((current) => ({ ...current, ...patch }));
+    setForm((current) => {
+      const normalizedImpact =
+        normalizeBugImpact(patch.impact)
+        || normalizeBugImpact(patch.severity);
+      return {
+        ...current,
+        ...patch,
+        ...(normalizedImpact ? { impact: normalizedImpact } : {}),
+      };
+    });
   }, []);
 
   const replaceScreenshot = useCallback((screenshot: ScreenshotAttachment) => {
@@ -411,7 +423,6 @@ export function HandrailBugReporterProvider({
       const input: BugReportInput = {
         title: form.title,
         description: form.description,
-        impact: form.impact,
         severity: form.severity,
         route: form.route,
         appVersion: form.appVersion,
@@ -430,6 +441,10 @@ export function HandrailBugReporterProvider({
             }
           : {}),
         ...overrides,
+        impact:
+          normalizeBugImpact(overrides.impact)
+          || normalizeBugImpact(overrides.severity)
+          || form.impact,
       };
       try {
         const result = await reporter.submit(input, {

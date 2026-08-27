@@ -305,6 +305,8 @@ test("the packaged form delegates upload, paste, drop, thumbnail, policy, automa
   await act(async () => automation.props.onChange({ target: { checked: true } }));
   await act(async () => renderer.root.findByProps({ "aria-label": "Email me when this bug is fixed" }).props.onChange({ target: { checked: true } }));
   assert.equal(renderer.root.findByProps({ "aria-label": "Email me when this bug is fixed" }).props.checked, true);
+  assert.equal(renderer.root.findByProps({ "aria-label": "Moderate impact" }).props.checked, true);
+  await act(async () => renderer.root.findByProps({ "aria-label": "High impact" }).props.onChange());
 
   const reportForm = renderer.root.findAll((node) => node.type === "form")[0];
   await act(async () => reportForm.props.onSubmit({ preventDefault: () => undefined }));
@@ -315,6 +317,7 @@ test("the packaged form delegates upload, paste, drop, thumbnail, policy, automa
   assert.equal(submitted.description, "Continue does not respond.");
   assert.equal(submitted.reproducer, "1. Open checkout. 2. Click Continue.");
   assert.equal(submitted.screenshot_mime_type, "image/png");
+  assert.equal(submitted.severity, "high");
   assert.deepEqual(submitted.automation_requests, { fix: true });
   assert.deepEqual(submitted.reporter_notification, {
     notify_on_resolution: true,

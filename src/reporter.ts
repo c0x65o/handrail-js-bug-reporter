@@ -39,11 +39,11 @@ export const AUTOMATION_OPTIONS = Object.freeze([
   Object.freeze({ key: "fix", label: "Fix this issue" }),
   Object.freeze({
     key: "deploy_staging",
-    label: "Deploy the fix to staging",
+    label: "Fix and deploy to staging",
   }),
   Object.freeze({
     key: "deploy_production",
-    label: "Deploy the fix to production",
+    label: "Fix and deploy to production",
   }),
 ] as const);
 
@@ -1724,7 +1724,10 @@ export class HandrailBugReporterClient {
       redactSensitiveValues({
         title: input.title,
         description: input.description,
-        severity: normalizeBugImpact(input.impact ?? input.severity) || undefined,
+        severity:
+          normalizeBugImpact(input.impact)
+          || normalizeBugImpact(input.severity)
+          || undefined,
         route: input.route,
         app_version: input.appVersion,
         build_number: input.buildNumber,

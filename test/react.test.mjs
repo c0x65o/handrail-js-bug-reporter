@@ -131,9 +131,13 @@ test("headless React controls are policy-derived and submit through the core pay
   assert.equal(value.form.screenshot.filename, "react.png");
   await act(async () => {
     value.removeScreenshot();
-    value.updateForm({ description: "Updated without rendered UI" });
+    value.updateForm({
+      description: "Updated without rendered UI",
+      severity: "sev2",
+    });
   });
   assert.equal(value.form.screenshot, null);
+  assert.equal(value.form.impact, "high");
 
   await act(async () => {
     await value.submit();
@@ -142,6 +146,7 @@ test("headless React controls are policy-derived and submit through the core pay
   const body = JSON.parse(requests.at(-1).body);
   assert.equal(body.title, "React issue");
   assert.equal(body.description, "Updated without rendered UI");
+  assert.equal(body.severity, "high");
   assert.equal(body.route, "/react");
   assert.deepEqual(body.automation_requests, { fix: true });
   assert.equal(body.reporter_sdk_runtime, "react");

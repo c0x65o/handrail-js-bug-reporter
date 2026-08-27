@@ -4,6 +4,8 @@ import {
   createBugReporter,
   stampReport as stampBrowserReport,
   type BugReporterPolicy,
+  type BugImpact,
+  type HandrailBugSeverity,
   type BugArchiveClosedResult,
   type BugArchiveResult,
   type BugTrackingPage,
@@ -81,6 +83,11 @@ const packagedDialogProps: HandrailBugReporterDialogProps = {
 };
 void packagedButtonProps;
 void packagedDialogProps;
+
+const canonicalImpact: BugImpact = "moderate";
+const storedSeverity: HandrailBugSeverity = "sev3";
+void canonicalImpact;
+void storedSeverity;
 
 const legacyHeadlessInitialForm: Partial<BugReporterFormState> = {
   notifyOnResolution: true,

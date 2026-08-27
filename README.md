@@ -61,6 +61,7 @@ await reporter.submit(
   {
     title: "Checkout button does not respond",
     description: "Clicking Continue has no visible effect.",
+    impact: "moderate",
     route: window.location.pathname,
     metadata: { viewport: `${window.innerWidth}x${window.innerHeight}` },
   },
@@ -70,6 +71,23 @@ await reporter.submit(
   },
 );
 ```
+
+### Impact and Handrail severity
+
+All packaged and headless web integrations use the same four-level contract:
+
+| UI label | SDK `impact` | Handrail severity |
+| --- | --- | --- |
+| Critical | `critical` | `sev1` |
+| High | `high` | `sev2` |
+| Moderate | `moderate` | `sev3` |
+| Low | `low` | `sev4` |
+
+New code should set `impact`. The SDK sends the canonical impact through the
+existing `severity` intake field. Existing callers remain compatible:
+`Critical`/`High`/`Medium`/`Moderate`/`Low` and
+`sev1` through `sev4` are accepted and normalized before submission. The
+packaged React form defaults to Moderate and uses these exact four labels.
 
 ### Report update notifications
 
@@ -140,11 +158,12 @@ accepts only a version-1 response for the configured project and environment
 whose reporter identity is server-verified. It ignores unknown automation
 keys and uses this fixed allowlist:
 
-- `auto_verify`
-- `repair_proposal`
-- `fix`
 - `deploy_staging`
 - `deploy_production`
+
+Verification and repair proposals are automatic. The server advertises only
+the staging and production controls allowed for the reporter's access tier.
+Older policy keys remain accepted for compatibility with in-flight responses.
 
 Policy discovery falls back to vanilla reporting after five seconds by
 default, so a stalled application-session resolver or policy endpoint cannot

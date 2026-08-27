@@ -3,9 +3,13 @@ import { test } from "node:test";
 
 import {
   APPLICATION_SESSION_TOKEN_HEADER,
+  BUG_SEVERITY_OPTIONS,
   BugReporterError,
   MAX_SCREENSHOT_BYTES,
+  bugImpactLabel,
   createBugReporter,
+  handrailBugSeverity,
+  normalizeBugImpact,
   normalizeBugReporterEndpoints,
 } from "@handrail/bug-reporter";
 
@@ -46,6 +50,20 @@ function reporterConfig(overrides = {}) {
     ...overrides,
   };
 }
+
+test("bug severity contract normalizes labels, canonical impact, and Handrail storage values", () => {
+  assert.deepEqual(BUG_SEVERITY_OPTIONS, [
+    { label: "Critical", impact: "critical", handrailSeverity: "sev1" },
+    { label: "High", impact: "high", handrailSeverity: "sev2" },
+    { label: "Moderate", impact: "moderate", handrailSeverity: "sev3" },
+    { label: "Low", impact: "low", handrailSeverity: "sev4" },
+  ]);
+  assert.equal(normalizeBugImpact("Medium"), "moderate");
+  assert.equal(normalizeBugImpact("sev3"), "moderate");
+  assert.equal(handrailBugSeverity("moderate"), "sev3");
+  assert.equal(bugImpactLabel("sev3"), "Moderate");
+  assert.equal(normalizeBugImpact("unknown"), null);
+});
 
 function trackedBug(overrides = {}) {
   return {
@@ -353,6 +371,7 @@ test("submission retries idempotently with fresh session headers and filtered au
       appVersion: "1.2.3",
       buildNumber: "42",
       commitSha: "abc123",
+      severity: "sev2",
     },
     {
       automationRequests: [
@@ -388,6 +407,7 @@ test("submission retries idempotently with fresh session headers and filtered au
   assert.match(firstBody.event_id, /^js-/);
   assert.equal(firstBody.project_id, "project-123");
   assert.equal(firstBody.environment, "staging");
+  assert.equal(firstBody.severity, "high");
   assert.equal(firstBody.source, "node_web_bug_reporter");
   assert.equal(firstBody.platform, "browser");
   assert.equal(firstBody.reporter_sdk_runtime, "browser");
@@ -560,6 +580,7 @@ test("verified reporters page and look up their bugs with fresh session headers"
     visibility: "archived",
   });
   assert.equal(page.bugs[0].status_rollup.stage, "fixing");
+  assert.equal(page.bugs[0].impact, "high");
   assert.equal(page.bugs[0].status_group, "in_progress");
   assert.equal(page.bugs[0].reported_app_version, "2.24.1");
   assert.equal(page.bugs[0].reported_route, "/checkout");
