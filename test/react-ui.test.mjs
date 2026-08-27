@@ -179,8 +179,8 @@ test("appearance tokens, dialog semantics, focus containment, Escape, and focus 
     assert.equal(dialog.props["aria-modal"], "true");
     assert.ok(dialog.props["aria-labelledby"]);
     assert.ok(dialog.props["aria-describedby"]);
-    assert.equal(dialog.props.style.width, "min(720px, calc(100vw - 28px))");
-    assert.equal(dialog.props.style.height, "min(780px, calc(100dvh - 28px))");
+    assert.equal(dialog.props.style.width, "min(1280px, calc(100vw - 40px))");
+    assert.equal(dialog.props.style.height, "min(900px, calc(100dvh - 40px))");
     assert.equal(fakeDocument.activeElement, first);
 
     let prevented = false;
@@ -230,7 +230,7 @@ test("the packaged form delegates upload, paste, drop, thumbnail, policy, automa
   await act(async () => {
     renderer = create(createElement(
       HandrailBugReporterProvider,
-      { config: config(fetch) },
+      { config: config(fetch), initialForm: { route: "/checkout", appVersion: "1.2.3", buildNumber: "77" } },
       createElement(HandrailBugReporterDialog, { open: true, onClose: () => undefined }),
     ));
   });
@@ -238,6 +238,12 @@ test("the packaged form delegates upload, paste, drop, thumbnail, policy, automa
   const notification = renderer.root.findByProps({ "aria-label": "Email me when this bug is fixed" });
   assert.equal(notification.props.checked, false);
   assert.match(JSON.stringify(renderer.toJSON()), /j\*\*\*@example\.com/);
+  assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-report-layout": "true" }).length, 1);
+  assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-context": "true" }).length, 1);
+  assert.match(JSON.stringify(renderer.toJSON()), /Attached context/);
+  assert.match(JSON.stringify(renderer.toJSON()), /staging/);
+  assert.match(JSON.stringify(renderer.toJSON()), /\/checkout/);
+  assert.match(JSON.stringify(renderer.toJSON()), /1\.2\.3/);
 
   const inputs = renderer.root.findAll((node) => node.type === "input");
   const title = inputs.find((node) => node.props.placeholder === "What is broken?");
@@ -473,7 +479,11 @@ test("My bugs uses the provider history, filter, archive, restore, and clear-clo
   assert.equal(renderer.root.findAllByType("article").length, 2);
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-history": "true" }).length, 1);
   assert.equal(renderer.root.findByProps({ "aria-label": "Filter bugs by status" }).props.role, "group");
-  assert.equal(renderer.root.findByProps({ role: "dialog" }).props.style.height, "min(872px, calc(100dvh - 28px))");
+  assert.equal(renderer.root.findByProps({ role: "dialog" }).props.style.height, "min(900px, calc(100dvh - 40px))");
+  assert.equal(renderer.root.findByProps({ role: "table" }).props["aria-label"], "Reported bugs");
+  assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-history-row": "true" }).length, 2);
+  await act(async () => renderer.root.findByProps({ "aria-label": "View Bug bug-1" }).props.onClick());
+  assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-history-detail": "true" }).length, 1);
   assert.deepEqual(renderer.root.findByProps({ "aria-label": "Bug history visibility" }).findAllByType("button").map((button) => button.children.join("")), ["Active", "Archived"]);
 
   await act(async () => renderer.root.findByProps({ "aria-label": "Dismiss Bug bug-1" }).props.onClick());

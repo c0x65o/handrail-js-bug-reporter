@@ -78,7 +78,33 @@ type UiVariables = CSSProperties & Record<`--handrail-bug-${string}`, string>;
 type DialogTab = "report" | "history";
 
 const RESPONSIVE_DIALOG_CSS = `
-@media (max-width: 520px) {
+@media (max-width: 860px) {
+  [data-handrail-bug-report-layout="true"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  [data-handrail-bug-context="true"] {
+    order: -1;
+  }
+  [data-handrail-bug-history-header="true"] {
+    display: none !important;
+  }
+  [data-handrail-bug-history-row="true"] {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    gap: 8px 14px !important;
+    padding: 14px !important;
+  }
+  [data-handrail-bug-history-cell="secondary"] {
+    display: none !important;
+  }
+  [data-handrail-bug-history-cell="status"] {
+    grid-column: 1;
+  }
+  [data-handrail-bug-history-cell="action"] {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+}
+@media (max-width: 560px) {
   [data-handrail-bug-reporter="overlay"] {
     padding: 0 !important;
   }
@@ -93,7 +119,7 @@ const RESPONSIVE_DIALOG_CSS = `
     padding: 16px 18px 14px !important;
   }
   [data-handrail-bug-reporter-content="report"] {
-    padding: 16px 18px !important;
+    padding: 12px 14px !important;
   }
   [data-handrail-bug-reporter-content="history"] {
     padding: 12px 14px 0 !important;
@@ -103,6 +129,9 @@ const RESPONSIVE_DIALOG_CSS = `
   }
   [data-handrail-bug-history-list="true"] {
     min-height: 150px !important;
+  }
+  [data-handrail-bug-reporter-tabs="true"] {
+    margin-bottom: 14px !important;
   }
 }
 `;
@@ -212,9 +241,9 @@ const styles: Record<string, CSSProperties> = {
   dialog: {
     display: "flex",
     flexDirection: "column",
-    width: "min(720px, calc(100vw - 28px))",
-    height: "min(780px, calc(100dvh - 28px))",
-    maxHeight: "calc(100vh - 32px)",
+    width: "min(1280px, calc(100vw - 40px))",
+    height: "min(900px, calc(100dvh - 40px))",
+    maxHeight: "calc(100vh - 40px)",
     boxSizing: "border-box",
     overflow: "hidden",
     border: "1px solid var(--handrail-bug-border)",
@@ -228,14 +257,14 @@ const styles: Record<string, CSSProperties> = {
     isolation: "isolate",
   },
   historyDialog: {
-    height: "min(872px, calc(100dvh - 28px))",
+    height: "min(900px, calc(100dvh - 40px))",
   },
   header: {
     display: "flex",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 16,
-    padding: "22px 28px 18px",
+    padding: "18px 24px 16px",
     borderBottom: "1px solid var(--handrail-bug-border)",
   },
   content: {
@@ -244,19 +273,19 @@ const styles: Record<string, CSSProperties> = {
     flex: 1,
     minHeight: 0,
     overflow: "auto",
-    padding: "20px 26px",
+    padding: "16px 20px",
     background: "var(--handrail-bug-surface)",
   },
   historyContent: {
     gap: 10,
     overflow: "hidden",
-    padding: "14px 20px 0",
+    padding: "12px 20px 0",
   },
   tabs: {
     display: "flex",
     gap: 8,
     padding: 5,
-    marginBottom: 24,
+    marginBottom: 16,
     border: "1px solid var(--handrail-bug-border)",
     borderRadius: 14,
     background: "var(--handrail-bug-surface-muted)",
@@ -265,13 +294,13 @@ const styles: Record<string, CSSProperties> = {
     flex: 1,
     border: "1px solid transparent",
     borderRadius: 10,
-    padding: "11px 16px",
+    padding: "8px 14px",
     cursor: "pointer",
     color: "inherit",
     background: "transparent",
     font: "inherit",
     fontWeight: 700,
-    minHeight: 46,
+    minHeight: 38,
   },
   activeTab: {
     borderColor: "var(--handrail-bug-border)",
@@ -281,7 +310,7 @@ const styles: Record<string, CSSProperties> = {
   label: {
     display: "grid",
     gap: 7,
-    marginBottom: 16,
+    marginBottom: 12,
     color: "inherit",
     fontSize: 13,
     fontWeight: 700,
@@ -291,27 +320,27 @@ const styles: Record<string, CSSProperties> = {
     boxSizing: "border-box",
     border: "1px solid var(--handrail-bug-border)",
     borderRadius: 11,
-    padding: "11px 14px",
+    padding: "9px 12px",
     color: "inherit",
     background: "var(--handrail-bug-surface)",
     fontFamily: "inherit",
     fontSize: "inherit",
     fontWeight: 400,
     lineHeight: "inherit",
-    minHeight: 46,
+    minHeight: 40,
     outlineOffset: 2,
   },
   fieldset: {
-    margin: "16px 0 0",
-    padding: 14,
+    margin: "12px 0 0",
+    padding: 12,
     border: "1px solid var(--handrail-bug-border)",
     borderRadius: 11,
   },
   screenshotDropzone: {
     display: "grid",
     placeItems: "center",
-    minHeight: 84,
-    padding: 16,
+    minHeight: 70,
+    padding: 12,
     border: "1px dashed var(--handrail-bug-border)",
     borderRadius: 10,
     background: "var(--handrail-bug-surface-muted)",
@@ -345,8 +374,8 @@ const styles: Record<string, CSSProperties> = {
     alignItems: "center",
     gap: 10,
     flexWrap: "wrap",
-    margin: "20px -26px -20px",
-    padding: "16px 26px",
+    margin: "16px -20px -16px",
+    padding: "12px 20px",
     borderTop: "1px solid var(--handrail-bug-border)",
     background: "var(--handrail-bug-surface)",
   },
@@ -362,11 +391,11 @@ const styles: Record<string, CSSProperties> = {
   button: {
     border: "1px solid transparent",
     borderRadius: 10,
-    padding: "10px 16px",
+    padding: "8px 14px",
     cursor: "pointer",
     font: "inherit",
     fontWeight: 700,
-    minHeight: 42,
+    minHeight: 38,
     outlineOffset: 2,
   },
   primaryButton: {
@@ -387,12 +416,11 @@ const styles: Record<string, CSSProperties> = {
     marginBottom: 10,
   },
   historyItem: {
-    display: "flex",
-    justifyContent: "space-between",
+    display: "grid",
+    gridTemplateColumns: "minmax(240px, 2.2fr) minmax(90px, .7fr) minmax(100px, .8fr) minmax(110px, .8fr) minmax(120px, 1fr) minmax(130px, 1fr) 112px",
     alignItems: "center",
-    gap: 18,
-    flexWrap: "wrap",
-    padding: "18px 20px",
+    gap: 12,
+    padding: "12px 14px",
     borderBottom: "1px solid var(--handrail-bug-border)",
     background: "var(--handrail-bug-surface)",
   },
@@ -412,10 +440,10 @@ const styles: Record<string, CSSProperties> = {
     background: "var(--handrail-bug-surface-muted)",
   },
   historyListHeader: {
-    display: "flex",
-    justifyContent: "space-between",
+    display: "grid",
+    gridTemplateColumns: "minmax(240px, 2.2fr) minmax(90px, .7fr) minmax(100px, .8fr) minmax(110px, .8fr) minmax(120px, 1fr) minmax(130px, 1fr) 112px",
     gap: 12,
-    padding: "10px 20px",
+    padding: "9px 14px",
     color: "var(--handrail-bug-muted-text)",
     fontSize: 11,
     fontWeight: 800,
@@ -600,51 +628,51 @@ const HISTORY_FILTERS: readonly {
 function BugHistoryRow({
   bug,
   busy,
+  expanded,
+  onToggle,
   onArchive,
   onRestore,
 }: {
   readonly bug: TrackedBugRecord;
   readonly busy: boolean;
+  readonly expanded: boolean;
+  readonly onToggle: (bugId: string) => void;
   readonly onArchive: (bugId: string) => Promise<void>;
   readonly onRestore: (bugId: string) => Promise<void>;
 }): ReactElement {
   const group = bugStatusGroup(bug);
-  const metadata = [
-    bug.severity ? bugSeverityLabel(bug.severity) : null,
-    bugDate(bug.last_reported_at),
-    bug.reported_app_version ? `v${bug.reported_app_version.replace(/^v/iu, "")}` : null,
-    bug.reported_app_flavor || bug.reported_route,
-    bug.reporter_occurrence_count > 1 ? `${bug.reporter_occurrence_count} reports` : null,
-  ].filter(Boolean);
   const statusTimestamp = bug.status_rollup.updated_at || bug.updated_at;
-  return <article style={styles.historyItem}>
-    <div style={{ flex: "1 1 360px", minWidth: 0 }}>
-      <strong style={{ display: "block", marginBottom: 7, fontSize: 15, lineHeight: 1.35 }}>{bug.title}</strong>
-      <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center", color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>
-        {metadata.map((item, index) => <span key={`${String(item)}-${index}`} style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
-          {index > 0 && <span aria-hidden="true" style={{ opacity: 0.45 }}>•</span>}{item}
-        </span>)}
-      </div>
+  return <article role="row" data-handrail-bug-history-row="true" style={styles.historyItem}>
+    <div role="cell" style={{ minWidth: 0 }}>
+      <strong style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 13, lineHeight: 1.35 }}>{bug.title}</strong>
+      {bug.reporter_occurrence_count > 1 && <span style={{ display: "block", marginTop: 3, color: "var(--handrail-bug-muted-text)", fontSize: 11 }}>{bug.reporter_occurrence_count} reports</span>}
     </div>
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 18, flex: "0 1 auto", flexWrap: "wrap" }}>
-      <div style={{ display: "grid", justifyItems: "end", gap: 4 }}>
-        <span style={{ minWidth: 124, padding: "5px 11px", border: "1px solid", borderRadius: 999, textAlign: "center", fontSize: 12, fontWeight: 800, ...statusBadgeStyle(group) }}>
-          {bug.status_rollup.label}
-        </span>
-        <span title={bugDate(statusTimestamp)} style={{ color: "var(--handrail-bug-muted-text)", fontSize: 11 }}>
-          {bugRelativeAge(statusTimestamp)}
-        </span>
-      </div>
+    <span role="cell" data-handrail-bug-history-cell="secondary" style={{ color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>{bugSeverityLabel(bug.severity)}</span>
+    <span role="cell" data-handrail-bug-history-cell="secondary" style={{ color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>{bugDate(bug.last_reported_at)}</span>
+    <span role="cell" data-handrail-bug-history-cell="secondary" style={{ color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>{bug.reported_app_version ? `v${bug.reported_app_version.replace(/^v/iu, "")}` : "—"}</span>
+    <span role="cell" data-handrail-bug-history-cell="secondary" title={bug.reported_route || undefined} style={{ overflow: "hidden", color: "var(--handrail-bug-muted-text)", fontSize: 12, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bug.reported_app_flavor || bug.reported_route || "—"}</span>
+    <div role="cell" data-handrail-bug-history-cell="status" style={{ display: "grid", justifyItems: "start", gap: 3 }}>
+      <span style={{ padding: "4px 9px", border: "1px solid", borderRadius: 999, textAlign: "center", fontSize: 11, fontWeight: 800, ...statusBadgeStyle(group) }}>{bug.status_rollup.label}</span>
+      <span title={bugDate(statusTimestamp)} style={{ color: "var(--handrail-bug-muted-text)", fontSize: 10 }}>{bugRelativeAge(statusTimestamp)}</span>
+    </div>
+    <div role="cell" data-handrail-bug-history-cell="action" style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+      <button type="button" aria-expanded={expanded} aria-label={`View ${bug.title}`} onClick={() => onToggle(bug.id)} style={{ border: 0, padding: "6px 2px", color: "var(--handrail-bug-accent)", background: "transparent", cursor: "pointer", font: "inherit", fontSize: 12, fontWeight: 800 }}>View</button>
       <button
         type="button"
         disabled={busy}
         aria-label={`${bug.archived ? "Restore" : "Dismiss"} ${bug.title}`}
         onClick={() => void (bug.archived ? onRestore(bug.id) : onArchive(bug.id))}
-        style={{ border: 0, padding: "7px 2px", color: "var(--handrail-bug-accent)", background: "transparent", cursor: busy ? "wait" : "pointer", font: "inherit", fontSize: 12, fontWeight: 800 }}
+        style={{ border: 0, padding: "6px 2px", color: "var(--handrail-bug-accent)", background: "transparent", cursor: busy ? "wait" : "pointer", font: "inherit", fontSize: 12, fontWeight: 800 }}
       >
         {busy ? "Updating…" : bug.archived ? "Restore" : "Dismiss"}
       </button>
     </div>
+    {expanded && <div role="cell" data-handrail-bug-history-detail="true" style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, padding: "10px 12px", border: "1px solid var(--handrail-bug-border)", borderRadius: 9, color: "var(--handrail-bug-muted-text)", background: "var(--handrail-bug-surface-muted)", fontSize: 11 }}>
+      <span><strong style={{ display: "block", color: "var(--handrail-bug-text)" }}>Bug ID</strong>{bug.id}</span>
+      <span><strong style={{ display: "block", color: "var(--handrail-bug-text)" }}>Environment</strong>{bug.environment}</span>
+      <span><strong style={{ display: "block", color: "var(--handrail-bug-text)" }}>Reported page</strong>{bug.reported_route || "Not provided"}</span>
+      <span><strong style={{ display: "block", color: "var(--handrail-bug-text)" }}>Occurrences</strong>{bug.occurrence_count}</span>
+    </div>}
   </article>;
 }
 
@@ -656,6 +684,7 @@ function BugHistory({ onClose }: { readonly onClose: () => void }): ReactElement
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
   const [filtersVisible, setFiltersVisible] = useState(true);
   const [busyBugId, setBusyBugId] = useState<string | null>(null);
+  const [expandedBugId, setExpandedBugId] = useState<string | null>(null);
   const [historyActionError, setHistoryActionError] = useState<string | null>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -851,9 +880,9 @@ function BugHistory({ onClose }: { readonly onClose: () => void }): ReactElement
     {historyActionError && <div role="alert" style={{ ...styles.status, background: "var(--handrail-bug-danger-surface)", color: "var(--handrail-bug-danger-text)" }}>{historyActionError}</div>}
     {reporter.tracking.status === "loading" && reporter.tracking.bugs.length === 0 && <div role="status" style={{ ...styles.status, background: "var(--handrail-bug-surface-muted)", color: "var(--handrail-bug-muted-text)" }}>Loading your bugs…</div>}
     {reporter.tracking.status === "error" && !historyActionError && <div role="alert" style={{ ...styles.status, background: "var(--handrail-bug-danger-surface)", color: "var(--handrail-bug-danger-text)" }}>{reporter.tracking.error?.message || "Bug history could not be loaded."}</div>}
-    {showHistoryResults && <div data-handrail-bug-history-list="true" style={{ ...styles.historyList, flex: "1 1 auto", opacity: reporter.tracking.status === "loading" ? 0.68 : 1 }}>
-      <div aria-hidden="true" style={styles.historyListHeader}>
-        <span>Issue</span><span>Status &amp; action</span>
+    {showHistoryResults && <div role="table" aria-label="Reported bugs" data-handrail-bug-history-list="true" style={{ ...styles.historyList, flex: "1 1 auto", opacity: reporter.tracking.status === "loading" ? 0.68 : 1 }}>
+      <div role="row" data-handrail-bug-history-header="true" style={styles.historyListHeader}>
+        <span role="columnheader">Issue</span><span role="columnheader">Severity</span><span role="columnheader">Date</span><span role="columnheader">App version</span><span role="columnheader">Page / path</span><span role="columnheader">Status</span><span role="columnheader">Action</span>
       </div>
       {reporter.tracking.bugs.length === 0
         ? <div role="status" style={{ display: "grid", placeItems: "center", minHeight: 180, padding: 24, color: "var(--handrail-bug-muted-text)", textAlign: "center" }}>
@@ -863,6 +892,8 @@ function BugHistory({ onClose }: { readonly onClose: () => void }): ReactElement
             key={bug.id}
             bug={bug}
             busy={busyBugId === bug.id}
+            expanded={expandedBugId === bug.id}
+            onToggle={(bugId) => setExpandedBugId((current) => current === bugId ? null : bugId)}
             onArchive={(bugId) => changeArchive(bugId, true)}
             onRestore={(bugId) => changeArchive(bugId, false)}
           />)}
@@ -1052,59 +1083,30 @@ function BugReportForm({ onCancel }: { readonly onCancel: () => void }): ReactEl
     {localError && <div role="alert" style={{ ...styles.status, background: "var(--handrail-bug-danger-surface)", color: "var(--handrail-bug-danger-text)" }}>{localError}</div>}
     {message && <div role={message.role} aria-live="polite" style={{ ...styles.status, ...message.style }}>{message.text}</div>}
 
-    <label style={styles.label}>
-      Brief summary
-      <input
-        required
-        maxLength={500}
-        value={reporter.form.title}
-        onChange={(event) => reporter.updateForm({ title: event.target.value })}
-        placeholder="What is broken?"
-        style={styles.input}
-      />
-    </label>
-    <label style={styles.label}>
-      Severity
-      <select
-        aria-label="Bug severity"
-        value={reporter.form.impact}
-        onChange={(event) => reporter.updateForm({
-          impact: event.target.value as BugImpact,
-          severity: undefined,
-        })}
-        style={styles.input}
-      >
-        {BUG_SEVERITY_OPTIONS.map((option) => (
-          <option key={option.impact} value={option.impact}>{option.label}</option>
-        ))}
-      </select>
-      <span style={{ color: "var(--handrail-bug-muted-text)", fontSize: 12, fontWeight: 500 }}>
-        How much this issue affects the user or workflow.
-      </span>
-    </label>
-    <label style={styles.label}>
-      What happened?
-      <textarea
-        required
-        maxLength={20_000}
-        value={reporter.form.description}
-        onChange={(event) => reporter.updateForm({ description: event.target.value })}
-        placeholder="Describe what you expected and what happened instead. You can paste a screenshot here."
-        style={{ ...styles.input, minHeight: 130, resize: "vertical" }}
-      />
-    </label>
-    <label style={styles.label}>
-      <span>Steps to reproduce <span style={{ marginLeft: 6, color: "var(--handrail-bug-muted-text)", fontSize: 12, fontWeight: 500 }}>Optional</span></span>
-      <textarea
-        maxLength={20_000}
-        value={reporter.form.reproducer || ""}
-        onChange={(event) => reporter.updateForm({ reproducer: event.target.value || undefined })}
-        placeholder="1. Open…  2. Click…  3. See…"
-        style={{ ...styles.input, minHeight: 92, resize: "vertical" }}
-      />
-    </label>
+    <div data-handrail-bug-report-layout="true" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.7fr) minmax(280px, .8fr)", gap: 20, alignItems: "start" }}>
+      <section aria-label="Bug details">
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(150px, .3fr)", gap: 12 }}>
+          <label style={styles.label}>
+            Brief summary
+            <input required maxLength={500} value={reporter.form.title} onChange={(event) => reporter.updateForm({ title: event.target.value })} placeholder="What is broken?" style={styles.input} />
+          </label>
+          <label style={styles.label}>
+            Severity
+            <select aria-label="Bug severity" value={reporter.form.impact} onChange={(event) => reporter.updateForm({ impact: event.target.value as BugImpact, severity: undefined })} style={styles.input}>
+              {BUG_SEVERITY_OPTIONS.map((option) => <option key={option.impact} value={option.impact}>{option.label}</option>)}
+            </select>
+          </label>
+        </div>
+        <label style={styles.label}>
+          What happened?
+          <textarea required maxLength={20_000} value={reporter.form.description} onChange={(event) => reporter.updateForm({ description: event.target.value })} placeholder="Describe what you expected and what happened instead. You can paste a screenshot here." style={{ ...styles.input, minHeight: 112, resize: "vertical" }} />
+        </label>
+        <label style={styles.label}>
+          <span>Steps to reproduce <span style={{ marginLeft: 6, color: "var(--handrail-bug-muted-text)", fontSize: 11, fontWeight: 500 }}>Optional</span></span>
+          <textarea maxLength={20_000} value={reporter.form.reproducer || ""} onChange={(event) => reporter.updateForm({ reproducer: event.target.value || undefined })} placeholder="1. Open…  2. Click…  3. See…" style={{ ...styles.input, minHeight: 78, resize: "vertical" }} />
+        </label>
 
-    {reporter.canAttachScreenshot && <div
+        {reporter.canAttachScreenshot && <div
       data-handrail-bug-screenshot-dropzone="true"
       onDragEnter={onScreenshotDragOver}
       onDragOver={onScreenshotDragOver}
@@ -1141,38 +1143,42 @@ function BugReportForm({ onCancel }: { readonly onCancel: () => void }): ReactEl
         font: "inherit",
         fontWeight: 700,
       }}><span aria-hidden="true" style={{ marginRight: 8, fontSize: 20 }}>+</span>Add or paste a screenshot</button>}
-    </div>}
+        </div>}
+      </section>
 
-    {reporter.policyStatus === "loading" && <div role="status" style={{ marginTop: 14, color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>Checking optional actions…</div>}
-    {reporter.automationOptions.length > 0 && <fieldset style={styles.fieldset}>
-      <legend style={{ padding: "0 5px", fontWeight: 700 }}>Optional actions</legend>
-      {reporter.automationOptions.map((option) => <label key={option.key} style={styles.checkboxLabel}>
-        <input
-          type="checkbox"
-          checked={reporter.form.automationRequests.includes(option.key)}
-          onChange={(event) => reporter.setAutomationRequest(option.key as AutomationOptionKey, event.target.checked)}
-        />
-        <span><strong>{option.label}</strong></span>
-      </label>)}
-    </fieldset>}
+      <aside data-handrail-bug-context="true" aria-label="Attached context and options" style={{ display: "grid", gap: 12 }}>
+        <section style={{ overflow: "hidden", border: "1px solid var(--handrail-bug-border)", borderRadius: 12, background: "var(--handrail-bug-surface)" }}>
+          <h3 style={{ margin: 0, padding: "12px 14px", borderBottom: "1px solid var(--handrail-bug-border)", fontSize: 13 }}>Attached context</h3>
+          {([
+            ["Current page", reporter.form.route || "Not provided"],
+            ["App version", reporter.form.appVersion || "Not provided"],
+            ["Environment", reporter.reporter.configuration.environment || "Not provided"],
+            ["Build", reporter.form.buildNumber || "Not provided"],
+          ] as const).map(([label, value]) => <div key={label} style={{ display: "grid", gridTemplateColumns: "110px minmax(0, 1fr)", gap: 12, padding: "10px 14px", borderBottom: "1px solid var(--handrail-bug-border)", fontSize: 12 }}>
+            <span style={{ color: "var(--handrail-bug-muted-text)" }}>{label}</span>
+            <strong title={value} style={{ overflow: "hidden", textAlign: "right", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</strong>
+          </div>)}
+          <p style={{ margin: 0, padding: "11px 14px", color: "var(--handrail-bug-muted-text)", background: "var(--handrail-bug-surface-muted)", fontSize: 11 }}>Only context shown here is included with this report.</p>
+        </section>
 
-    {notificationsAvailable && <fieldset style={styles.fieldset}>
-      <legend style={{ padding: "0 5px", fontWeight: 700 }}>Updates</legend>
-      <label style={{ ...styles.checkboxLabel, marginTop: 0 }}>
-        <input
-          aria-label="Email me when this bug is fixed"
-          type="checkbox"
-          checked={reporter.form.notifyOnResolution}
-          onChange={(event) => reporter.updateForm({ notifyOnResolution: event.target.checked })}
-        />
-        <span>
-          <strong>Email me when this bug is fixed</strong>
-          <span style={{ display: "block", marginTop: 2, color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>
-            We’ll send one email after the fix is available in the environment you’re using{notificationEligibility?.recipientHint ? `, to ${notificationEligibility.recipientHint}` : ""}.
-          </span>
-        </span>
-      </label>
-    </fieldset>}
+        {reporter.policyStatus === "loading" && <div role="status" style={{ color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>Checking optional actions…</div>}
+        {reporter.automationOptions.length > 0 && <fieldset style={{ ...styles.fieldset, margin: 0 }}>
+          <legend style={{ padding: "0 5px", fontWeight: 700 }}>Optional actions</legend>
+          {reporter.automationOptions.map((option) => <label key={option.key} style={styles.checkboxLabel}>
+            <input type="checkbox" checked={reporter.form.automationRequests.includes(option.key)} onChange={(event) => reporter.setAutomationRequest(option.key as AutomationOptionKey, event.target.checked)} />
+            <span><strong>{option.label}</strong></span>
+          </label>)}
+        </fieldset>}
+
+        {notificationsAvailable && <fieldset style={{ ...styles.fieldset, margin: 0 }}>
+          <legend style={{ padding: "0 5px", fontWeight: 700 }}>Updates</legend>
+          <label style={{ ...styles.checkboxLabel, marginTop: 0 }}>
+            <input aria-label="Email me when this bug is fixed" type="checkbox" checked={reporter.form.notifyOnResolution} onChange={(event) => reporter.updateForm({ notifyOnResolution: event.target.checked })} />
+            <span><strong>Email me when this bug is fixed</strong><span style={{ display: "block", marginTop: 2, color: "var(--handrail-bug-muted-text)", fontSize: 11 }}>One email after the fix reaches this environment{notificationEligibility?.recipientHint ? `, to ${notificationEligibility.recipientHint}` : ""}.</span></span>
+          </label>
+        </fieldset>}
+      </aside>
+    </div>
 
     <div style={styles.formActions}>
       <button type="button" onClick={onCancel} disabled={reporter.submission.status === "submitting"} style={buttonStyle("secondary")}>Cancel</button>
@@ -1188,7 +1194,7 @@ function BugReportForm({ onCancel }: { readonly onCancel: () => void }): ReactEl
 export function HandrailBugReporterDialog({
   open,
   onClose,
-  heading = "Bug report",
+  heading = "Report a bug",
   appearance,
   showHistory = true,
 }: HandrailBugReporterDialogProps): ReactElement | null {
@@ -1300,14 +1306,14 @@ export function HandrailBugReporterDialog({
     >
       <header data-handrail-bug-reporter-header="true" style={styles.header}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ marginBottom: 5, color: "var(--handrail-bug-accent)", fontSize: 11, fontWeight: 800, letterSpacing: "0.14em" }}>HELP US FIX IT</div>
-          <h2 id={headingId} style={{ margin: 0, fontSize: 24, lineHeight: 1.2, letterSpacing: "-0.02em" }}>{heading}</h2>
-          <div id={descriptionId} style={{ marginTop: 6, color: "var(--handrail-bug-muted-text)", fontSize: 13 }}>Tell us what went wrong. The current page and app version are included automatically.</div>
+          <div style={{ marginBottom: 4, color: "var(--handrail-bug-accent)", fontSize: 10, fontWeight: 800, letterSpacing: "0.14em" }}>HELP US FIX IT</div>
+          <h2 id={headingId} style={{ margin: 0, fontSize: 22, lineHeight: 1.2, letterSpacing: "-0.02em" }}>{heading}</h2>
+          <div id={descriptionId} style={{ marginTop: 4, color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>Describe the issue and review the attached context before sending.</div>
         </div>
         <button type="button" aria-label="Close bug reporter" disabled={reporter.submission.status === "submitting"} onClick={closeDialog} style={{ ...buttonStyle("secondary"), width: 44, minWidth: 44, height: 44, padding: 0, fontSize: 22, lineHeight: 1, opacity: reporter.submission.status === "submitting" ? 0.65 : 1 }}>×</button>
       </header>
       <div data-handrail-bug-reporter-content={tab} style={{ ...styles.content, ...(tab === "history" ? styles.historyContent : {}) }}>
-        {showHistory && <div role="tablist" aria-label="Bug reporter views" style={styles.tabs}>
+        {showHistory && <div role="tablist" aria-label="Bug reporter views" data-handrail-bug-reporter-tabs="true" style={styles.tabs}>
           <button id={reportTabId} type="button" role="tab" aria-controls={reportPanelId} aria-selected={tab === "report"} tabIndex={tab === "report" ? 0 : -1} onClick={() => selectTab("report")} style={{ ...styles.tab, ...(tab === "report" ? styles.activeTab : {}) }}>Report a bug</button>
           <button id={historyTabId} type="button" role="tab" aria-controls={historyPanelId} aria-selected={tab === "history"} tabIndex={tab === "history" ? 0 : -1} onClick={() => selectTab("history")} style={{ ...styles.tab, ...(tab === "history" ? styles.activeTab : {}) }}>
             <span>My bugs</span>

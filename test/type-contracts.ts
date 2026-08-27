@@ -92,7 +92,13 @@ void storedSeverity;
 const legacyHeadlessInitialForm: Partial<BugReporterFormState> = {
   notifyOnResolution: true,
 };
+const packagedContextInitialForm: Partial<BugReporterFormState> = {
+  route: "/invoices/42",
+  appVersion: "1.2.3",
+  buildNumber: "456",
+};
 void legacyHeadlessInitialForm;
+void packagedContextInitialForm;
 
 type AppRequest = { readonly applicationSessionToken?: string };
 const requestReporters = createRequestScopedBugReporter<AppRequest>({

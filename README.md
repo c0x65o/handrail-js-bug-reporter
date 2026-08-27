@@ -450,8 +450,12 @@ export function App() {
 ```
 
 The dialog delegates all policy, validation, submission, notification, and
-history operations to the same headless provider described below. It includes
-the bug form, one validated PNG/JPEG screenshot by styled upload, direct
+history operations to the same headless provider described below. Its compact,
+wide desktop layout presents the bug form beside an **Attached context** panel
+that reflects the route, app version, environment, and build values that will
+actually be submitted. Supply application-owned context through `initialForm`;
+the UI never claims or displays context it did not receive. It includes one
+validated PNG/JPEG screenshot by styled upload, direct
 clipboard paste, or drag and drop, an immediate thumbnail with Replace/Remove
 actions, policy-derived Ask controls,
 an unchecked report-scoped update consent control when the verified user is
@@ -472,7 +476,7 @@ tokens without changing reporter behavior:
 - `dangerSurface`, `dangerText`, `successSurface`, `successText`
 - `radius`, `fontFamily`
 
-The stable dialog uses most of the available viewport (up to 1280 × 960 px),
+The stable dialog uses most of the available viewport (up to 1280 × 900 px),
 keeps the same dimensions while switching between the report and history tabs,
 and scrolls its content within that fixed shell. The same values are installed
 as scoped `--handrail-bug-*` CSS variables on
@@ -483,8 +487,9 @@ overlay click, restores launcher focus, announces loading/errors/success in
 text, and bounds itself to the available viewport.
 
 The packaged history view uses the same appearance contract and provides a
-structured issue list, semantic status badges, active/archived visibility,
-status counts, search, sort, dismiss/restore actions, and bounded pagination.
+dense desktop tracker table with a responsive mobile-card layout, semantic
+status badges, active/archived visibility, status counts, search, sort,
+dismiss/restore actions, bounded pagination, and expandable row details.
 Applications can brand it with tokens, but do not need to rebuild those
 controls to get the production-ready default presentation.
 

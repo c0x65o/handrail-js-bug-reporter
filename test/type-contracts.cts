@@ -54,4 +54,10 @@ void packagedDialogProps;
 const legacyHeadlessInitialForm: Partial<react.BugReporterFormState> = {
   notifyOnResolution: true,
 };
+const packagedContextInitialForm: Partial<react.BugReporterFormState> = {
+  route: "/invoices/42",
+  appVersion: "1.2.3",
+  buildNumber: "456",
+};
 void legacyHeadlessInitialForm;
+void packagedContextInitialForm;
