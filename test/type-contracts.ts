@@ -32,6 +32,7 @@ import {
   useHandrailBugReporter,
   useHandrailBugReporterIdentity,
   type HandrailBugReporterAppearance,
+  type HandrailBugReporterStyle,
   type HandrailBugReporterButtonProps,
   type HandrailBugReporterDialogProps,
   type BugReporterFormState,
@@ -69,7 +70,8 @@ void HandrailBugReporterDialog;
 
 const packagedAppearance: HandrailBugReporterAppearance = {
   themeMode: "auto",
-  tokens: { accent: "#175cd3", radius: "8px" },
+  tokens: { accent: "#175cd3", warningText: "#b54708", infoText: "#175cd3", radius: "8px" },
+  style: { "--handrail-bug-accent": "#b93815" } satisfies HandrailBugReporterStyle,
 };
 const packagedButtonProps: HandrailBugReporterButtonProps = {
   label: "Report a bug",

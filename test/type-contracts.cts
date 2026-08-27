@@ -39,7 +39,8 @@ void react.HandrailBugReporterDialog;
 
 const packagedAppearance: react.HandrailBugReporterAppearance = {
   themeMode: "light",
-  tokens: { accent: "#175cd3" },
+  tokens: { accent: "#175cd3", warningText: "#b54708" },
+  style: { "--handrail-bug-info-text": "#175cd3" } satisfies react.HandrailBugReporterStyle,
 };
 const packagedButtonProps: react.HandrailBugReporterButtonProps = {
   appearance: packagedAppearance,

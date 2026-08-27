@@ -441,7 +441,14 @@ export function App() {
         label="Report a bug"
         appearance={{
           themeMode: "auto",
-          tokens: { accent: "var(--app-accent)", radius: "8px" },
+          tokens: {
+            accent: "var(--app-accent)",
+            accentText: "#fff",
+            infoText: "var(--app-info)",
+            radius: "8px",
+          },
+          // Direct scoped-variable overrides are type-safe too.
+          style: { "--handrail-bug-warning-text": "var(--app-warning)" },
         }}
       />
     </HandrailBugReporterProvider>
@@ -474,9 +481,15 @@ tokens without changing reporter behavior:
 - `accent`, `accentText`
 - `surface`, `surfaceMuted`, `text`, `mutedText`, `border`, `overlay`
 - `dangerSurface`, `dangerText`, `successSurface`, `successText`
+- `warningSurface`, `warningText`, `infoSurface`, `infoText`
 - `radius`, `fontFamily`
 
-The stable dialog uses most of the available viewport (up to 1280 × 900 px),
+Configuration tokens are mapped to scoped CSS custom properties. For host
+theme systems that already work in variables, `appearance.style` also accepts
+the typed `--handrail-bug-*` properties directly; direct values take precedence
+over `appearance.tokens`.
+
+The stable dialog uses most of the available viewport (up to 1560 × 960 px),
 keeps the same dimensions while switching between the report and history tabs,
 and scrolls its content within that fixed shell. The same values are installed
 as scoped `--handrail-bug-*` CSS variables on
