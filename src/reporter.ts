@@ -49,6 +49,7 @@ export const AUTOMATION_OPTIONS = Object.freeze([
 
 export type AutomationOptionKey = (typeof AUTOMATION_OPTIONS)[number]["key"];
 export type ReporterAccessLevel = "default" | "user" | "full_access";
+export type KnownUserAutomationRole = "requester" | "contributor" | "maintainer";
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonObject | readonly JsonValue[];
 export interface JsonObject {
@@ -73,6 +74,8 @@ export interface BugReporterPolicy {
   readonly environment: string;
   readonly identityVerified: true;
   readonly accessLevel: ReporterAccessLevel;
+  /** Canonical shared role on newer servers; accessLevel remains for compatibility. */
+  readonly role?: KnownUserAutomationRole | null;
   readonly askOptions: readonly AutomationOption[];
   /** Present when the policy endpoint advertises verified-user notification eligibility. */
   readonly reporterNotifications?: ReporterNotificationEligibility;
@@ -1822,6 +1825,10 @@ export class HandrailBugReporterClient {
     const accessLevel = cleanString(reporterRecord.access_level) as
       | ReporterAccessLevel
       | null;
+    const roleValue = cleanString(reporterRecord.role);
+    const role = roleValue === "requester" || roleValue === "contributor" || roleValue === "maintainer"
+      ? roleValue
+      : null;
     if (
       reporterRecord.identity_verified !== true ||
       !accessLevel ||
@@ -1857,6 +1864,7 @@ export class HandrailBugReporterClient {
       environment: this.environment!,
       identityVerified: true,
       accessLevel,
+      role,
       askOptions,
       reporterNotifications: Object.freeze({
         available: notificationAvailable,

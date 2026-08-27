@@ -475,8 +475,15 @@ success, and offers **Report another bug** and **Done** actions.
 
 `appearance.themeMode` accepts `auto`, `light`, or `dark`. `auto` is the
 default and follows the host color scheme while supplying a polished,
-high-contrast SDK palette and system typography. Override any of these typed
-tokens without changing reporter behavior:
+high-contrast SDK palette and system typography. Use `auto` when the host
+publishes its active scheme through CSS `color-scheme` (including a scheme
+inherited from the document root). If the application stores an account-level
+theme that can differ from the operating-system preference, pass the current
+`light` or `dark` value instead and provide the corresponding product tokens.
+Changing `themeMode` or `tokens` on a later render immediately restyles the
+built-in launcher and open dialog; the provider and headless client do not need
+to be remounted. Override any of these typed tokens without changing reporter
+behavior:
 
 - `accent`, `accentText`
 - `surface`, `surfaceMuted`, `text`, `mutedText`, `border`, `overlay`

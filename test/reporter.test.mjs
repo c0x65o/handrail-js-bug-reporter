@@ -20,6 +20,7 @@ const validPolicy = {
   reporter: {
     identity_verified: true,
     access_level: "full_access",
+    role: "maintainer",
   },
   reporter_notifications: {
     available: true,
@@ -218,6 +219,7 @@ test("policy lookup resolves a fresh session and accepts only verified allowlist
     { key: "fix", label: "Fix this issue" },
   ]);
   assert.deepEqual(second, first);
+  assert.equal(second.role, "maintainer");
   assert.ok(Object.isFrozen(second));
   assert.ok(Object.isFrozen(second.askOptions));
   assert.doesNotMatch(JSON.stringify(second), /policy-session/);

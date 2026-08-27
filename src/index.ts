@@ -76,6 +76,7 @@ export type {
   JsonObject,
   JsonPrimitive,
   JsonValue,
+  KnownUserAutomationRole,
   RedactionHook,
   ReporterAccessLevel,
   ReporterRetryOptions,
