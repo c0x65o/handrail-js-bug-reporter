@@ -45,9 +45,36 @@ export interface HandrailBugReporterThemeTokens {
   readonly dangerText: string;
   readonly successSurface: string;
   readonly successText: string;
+  readonly warningSurface: string;
+  readonly warningText: string;
+  readonly infoSurface: string;
+  readonly infoText: string;
   readonly radius: string;
   readonly fontFamily: string;
 }
+
+export type HandrailBugReporterCssVariable =
+  | "--handrail-bug-accent"
+  | "--handrail-bug-accent-text"
+  | "--handrail-bug-surface"
+  | "--handrail-bug-surface-muted"
+  | "--handrail-bug-text"
+  | "--handrail-bug-muted-text"
+  | "--handrail-bug-border"
+  | "--handrail-bug-overlay"
+  | "--handrail-bug-danger-surface"
+  | "--handrail-bug-danger-text"
+  | "--handrail-bug-success-surface"
+  | "--handrail-bug-success-text"
+  | "--handrail-bug-warning-surface"
+  | "--handrail-bug-warning-text"
+  | "--handrail-bug-info-surface"
+  | "--handrail-bug-info-text"
+  | "--handrail-bug-radius"
+  | "--handrail-bug-font-family";
+
+export type HandrailBugReporterStyle = CSSProperties
+  & Partial<Record<HandrailBugReporterCssVariable, string | number>>;
 
 export interface HandrailBugReporterAppearance {
   /** Defaults to auto, following the host color scheme with polished SDK defaults. */
@@ -55,7 +82,8 @@ export interface HandrailBugReporterAppearance {
   /** Overrides individual packaged-UI design tokens without changing behavior. */
   readonly tokens?: Partial<HandrailBugReporterThemeTokens>;
   readonly className?: string;
-  readonly style?: CSSProperties;
+  /** Overlay styles may also override any scoped --handrail-bug-* variable. */
+  readonly style?: HandrailBugReporterStyle;
 }
 
 export interface HandrailBugReporterDialogProps {
@@ -74,7 +102,7 @@ export interface HandrailBugReporterButtonProps
   readonly style?: CSSProperties;
 }
 
-type UiVariables = CSSProperties & Record<`--handrail-bug-${string}`, string>;
+type UiVariables = HandrailBugReporterStyle;
 type DialogTab = "report" | "history";
 
 const RESPONSIVE_DIALOG_CSS = `
@@ -157,7 +185,11 @@ const LIGHT_TOKENS: HandrailBugReporterThemeTokens = Object.freeze({
   dangerText: "#b42318",
   successSurface: "#ecfdf3",
   successText: "#027a48",
-  radius: "16px",
+  warningSurface: "#fff8eb",
+  warningText: "#b54708",
+  infoSurface: "#eff6ff",
+  infoText: "#175cd3",
+  radius: "12px",
   fontFamily: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
 });
 
@@ -174,7 +206,11 @@ const DARK_TOKENS: HandrailBugReporterThemeTokens = Object.freeze({
   dangerText: "#ffb4b8",
   successSurface: "#173326",
   successText: "#95ddb7",
-  radius: "16px",
+  warningSurface: "#3b2d16",
+  warningText: "#fbc46d",
+  infoSurface: "#172d4d",
+  infoText: "#a7c7ff",
+  radius: "12px",
   fontFamily: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
 });
 
@@ -191,7 +227,11 @@ const AUTO_TOKENS: HandrailBugReporterThemeTokens = Object.freeze({
   dangerText: "light-dark(#b42318, #ffb4b8)",
   successSurface: "light-dark(#ecfdf3, #173326)",
   successText: "light-dark(#027a48, #95ddb7)",
-  radius: "16px",
+  warningSurface: "light-dark(#fff8eb, #3b2d16)",
+  warningText: "light-dark(#b54708, #fbc46d)",
+  infoSurface: "light-dark(#eff6ff, #172d4d)",
+  infoText: "light-dark(#175cd3, #a7c7ff)",
+  radius: "12px",
   fontFamily: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
 });
 
@@ -227,6 +267,10 @@ function appearanceVariables(
     "--handrail-bug-danger-text": tokens.dangerText,
     "--handrail-bug-success-surface": tokens.successSurface,
     "--handrail-bug-success-text": tokens.successText,
+    "--handrail-bug-warning-surface": tokens.warningSurface,
+    "--handrail-bug-warning-text": tokens.warningText,
+    "--handrail-bug-info-surface": tokens.infoSurface,
+    "--handrail-bug-info-text": tokens.infoText,
     "--handrail-bug-radius": tokens.radius,
     "--handrail-bug-font-family": tokens.fontFamily,
     colorScheme: mode === "auto" ? "inherit" : mode,
@@ -242,16 +286,16 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: 16,
+    padding: 8,
     background: "var(--handrail-bug-overlay)",
     backdropFilter: "blur(3px)",
   },
   dialog: {
     display: "flex",
     flexDirection: "column",
-    width: "min(1280px, calc(100vw - 40px))",
-    height: "min(900px, calc(100dvh - 40px))",
-    maxHeight: "calc(100vh - 40px)",
+    width: "min(1560px, calc(100vw - 24px))",
+    height: "min(960px, calc(100dvh - 16px))",
+    maxHeight: "calc(100vh - 16px)",
     boxSizing: "border-box",
     overflow: "hidden",
     border: "1px solid var(--handrail-bug-border)",
@@ -260,19 +304,19 @@ const styles: Record<string, CSSProperties> = {
     color: "var(--handrail-bug-text)",
     boxShadow: "0 30px 90px rgba(0, 0, 0, 0.34)",
     fontFamily: "var(--handrail-bug-font-family)",
-    fontSize: 14,
-    lineHeight: 1.45,
+    fontSize: 13,
+    lineHeight: 1.4,
     isolation: "isolate",
   },
   historyDialog: {
-    height: "min(900px, calc(100dvh - 40px))",
+    height: "min(960px, calc(100dvh - 16px))",
   },
   header: {
     display: "flex",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 16,
-    padding: "18px 24px 16px",
+    padding: "14px 24px 12px",
     borderBottom: "1px solid var(--handrail-bug-border)",
   },
   content: {
@@ -281,48 +325,53 @@ const styles: Record<string, CSSProperties> = {
     flex: 1,
     minHeight: 0,
     overflow: "auto",
-    padding: "16px 20px",
+    padding: "12px 20px",
     background: "var(--handrail-bug-surface)",
   },
   historyContent: {
     gap: 10,
     overflow: "hidden",
-    padding: "12px 20px 0",
+    padding: "10px 20px 0",
   },
   tabs: {
     display: "flex",
-    gap: 4,
-    padding: 4,
-    marginBottom: 16,
-    border: "1px solid var(--handrail-bug-border)",
-    borderRadius: 14,
-    background: "var(--handrail-bug-surface-muted)",
+    gap: 8,
+    padding: 0,
+    marginBottom: 12,
+    border: 0,
+    borderRadius: 10,
+    background: "transparent",
   },
   tab: {
     flex: 1,
     appearance: "none",
     WebkitAppearance: "none",
     border: "1px solid transparent",
-    borderRadius: 10,
-    padding: "8px 14px",
+    borderRadius: 8,
+    padding: "7px 12px",
     cursor: "pointer",
     color: "var(--handrail-bug-muted-text)",
     background: "transparent",
     font: "inherit",
     fontWeight: 700,
-    minHeight: 38,
+    minHeight: 36,
     outlineOffset: 2,
   },
   activeTab: {
-    borderColor: "color-mix(in srgb, var(--handrail-bug-accent) 24%, var(--handrail-bug-border))",
+    borderColor: "var(--handrail-bug-accent)",
+    color: "var(--handrail-bug-accent-text)",
+    background: "var(--handrail-bug-accent)",
+    boxShadow: "0 1px 2px color-mix(in srgb, var(--handrail-bug-accent) 24%, transparent)",
+  },
+  selectedControl: {
+    borderColor: "color-mix(in srgb, var(--handrail-bug-accent) 32%, var(--handrail-bug-border))",
     color: "var(--handrail-bug-accent)",
-    background: "color-mix(in srgb, var(--handrail-bug-accent) 9%, var(--handrail-bug-surface))",
-    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.06)",
+    background: "color-mix(in srgb, var(--handrail-bug-accent) 8%, var(--handrail-bug-surface))",
   },
   label: {
     display: "grid",
-    gap: 7,
-    marginBottom: 12,
+    gap: 5,
+    marginBottom: 9,
     color: "inherit",
     fontSize: 13,
     fontWeight: 700,
@@ -331,28 +380,28 @@ const styles: Record<string, CSSProperties> = {
     width: "100%",
     boxSizing: "border-box",
     border: "1px solid var(--handrail-bug-border)",
-    borderRadius: 11,
-    padding: "9px 12px",
+    borderRadius: 8,
+    padding: "7px 10px",
     color: "inherit",
     background: "var(--handrail-bug-surface)",
     fontFamily: "inherit",
     fontSize: "inherit",
     fontWeight: 400,
     lineHeight: "inherit",
-    minHeight: 40,
+    minHeight: 36,
     outlineOffset: 2,
   },
   fieldset: {
-    margin: "12px 0 0",
-    padding: 12,
+    margin: "9px 0 0",
+    padding: 10,
     border: "1px solid var(--handrail-bug-border)",
-    borderRadius: 11,
+    borderRadius: 9,
   },
   screenshotDropzone: {
     display: "grid",
     placeItems: "center",
-    minHeight: 70,
-    padding: 12,
+    minHeight: 58,
+    padding: 10,
     border: "1px dashed var(--handrail-bug-border)",
     borderRadius: 10,
     background: "var(--handrail-bug-surface-muted)",
@@ -361,17 +410,17 @@ const styles: Record<string, CSSProperties> = {
   screenshotPreview: {
     display: "flex",
     alignItems: "center",
-    gap: 14,
+    gap: 10,
     flexWrap: "wrap",
-    padding: 10,
+    padding: 8,
     border: "1px solid var(--handrail-bug-border)",
     borderRadius: 10,
     background: "var(--handrail-bug-surface)",
   },
   screenshotThumbnail: {
-    width: 128,
-    height: 84,
-    flex: "0 0 128px",
+    width: 108,
+    height: 68,
+    flex: "0 0 108px",
     border: "1px solid var(--handrail-bug-border)",
     borderRadius: 8,
     objectFit: "cover",
@@ -384,10 +433,10 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     justifyContent: "flex-end",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
     flexWrap: "wrap",
-    margin: "16px -20px -16px",
-    padding: "12px 20px",
+    margin: "12px -20px -12px",
+    padding: "9px 20px",
     borderTop: "1px solid var(--handrail-bug-border)",
     background: "var(--handrail-bug-surface)",
   },
@@ -404,12 +453,12 @@ const styles: Record<string, CSSProperties> = {
     appearance: "none",
     WebkitAppearance: "none",
     border: "1px solid transparent",
-    borderRadius: 10,
-    padding: "8px 14px",
+    borderRadius: 8,
+    padding: "6px 12px",
     cursor: "pointer",
     font: "inherit",
     fontWeight: 700,
-    minHeight: 38,
+    minHeight: 34,
     outlineOffset: 2,
   },
   primaryButton: {
@@ -424,12 +473,12 @@ const styles: Record<string, CSSProperties> = {
   historyActionButton: {
     appearance: "none",
     WebkitAppearance: "none",
-    minHeight: 30,
-    padding: "5px 9px",
-    border: "1px solid var(--handrail-bug-border)",
-    borderRadius: 8,
+    minHeight: 28,
+    padding: "4px 3px",
+    border: 0,
+    borderRadius: 6,
     color: "var(--handrail-bug-accent)",
-    background: "var(--handrail-bug-surface)",
+    background: "transparent",
     cursor: "pointer",
     font: "inherit",
     fontSize: 12,
@@ -442,30 +491,30 @@ const styles: Record<string, CSSProperties> = {
     WebkitAppearance: "none",
     minHeight: 34,
     padding: "6px 10px",
-    border: "1px solid color-mix(in srgb, var(--handrail-bug-danger-text) 24%, var(--handrail-bug-border))",
+    border: 0,
     borderRadius: 9,
-    color: "var(--handrail-bug-danger-text)",
-    background: "var(--handrail-bug-danger-surface)",
+    color: "var(--handrail-bug-accent)",
+    background: "transparent",
     cursor: "pointer",
     font: "inherit",
     fontSize: 12,
     fontWeight: 700,
     outlineOffset: 2,
   },
-  status: { marginBottom: 14, borderRadius: 11, padding: "11px 14px", fontSize: 13 },
+  status: { marginBottom: 10, borderRadius: 8, padding: "9px 12px", fontSize: 12 },
   historyControls: {
     display: "flex",
     flexWrap: "wrap",
-    gap: 10,
+    gap: 8,
     alignItems: "center",
     marginBottom: 10,
   },
   historyItem: {
     display: "grid",
-    gridTemplateColumns: "minmax(240px, 2.2fr) minmax(90px, .7fr) minmax(100px, .8fr) minmax(110px, .8fr) minmax(120px, 1fr) minmax(130px, 1fr) 146px",
+    gridTemplateColumns: "minmax(220px, 2.2fr) minmax(84px, .65fr) minmax(92px, .72fr) minmax(96px, .72fr) minmax(115px, 1fr) minmax(160px, 1.2fr) 136px",
     alignItems: "center",
-    gap: 12,
-    padding: "12px 14px",
+    gap: 10,
+    padding: "8px 12px",
     borderBottom: "1px solid var(--handrail-bug-border)",
     background: "var(--handrail-bug-surface)",
   },
@@ -475,20 +524,20 @@ const styles: Record<string, CSSProperties> = {
     justifyContent: "space-between",
     gap: 12,
     flexWrap: "wrap",
-    marginBottom: 10,
+    marginBottom: 8,
   },
   historyList: {
     minHeight: 0,
     overflow: "hidden auto",
     border: "1px solid var(--handrail-bug-border)",
-    borderRadius: 14,
+    borderRadius: 10,
     background: "var(--handrail-bug-surface-muted)",
   },
   historyListHeader: {
     display: "grid",
-    gridTemplateColumns: "minmax(240px, 2.2fr) minmax(90px, .7fr) minmax(100px, .8fr) minmax(110px, .8fr) minmax(120px, 1fr) minmax(130px, 1fr) 146px",
-    gap: 12,
-    padding: "9px 14px",
+    gridTemplateColumns: "minmax(220px, 2.2fr) minmax(84px, .65fr) minmax(92px, .72fr) minmax(96px, .72fr) minmax(115px, 1fr) minmax(160px, 1.2fr) 136px",
+    gap: 10,
+    padding: "7px 12px",
     color: "var(--handrail-bug-muted-text)",
     fontSize: 11,
     fontWeight: 800,
@@ -499,7 +548,7 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     gap: 6,
     flexWrap: "wrap",
-    margin: "0 0 10px",
+    margin: "0 0 8px",
   },
   historyFooter: {
     display: "flex",
@@ -508,7 +557,7 @@ const styles: Record<string, CSSProperties> = {
     justifyContent: "space-between",
     gap: 12,
     margin: "auto -20px 0",
-    padding: "13px 20px",
+    padding: "9px 20px",
     borderTop: "1px solid var(--handrail-bug-border)",
     background: "var(--handrail-bug-surface)",
   },
@@ -630,7 +679,7 @@ function bugStatusGroup(bug: TrackedBugRecord): BugTrackingStatusGroup {
   return "in_progress";
 }
 
-function statusBadgeStyle(group: BugTrackingStatusGroup): CSSProperties {
+function statusBadgeStyle(group: BugTrackingStatusGroup, label: string): CSSProperties {
   if (group === "closed") {
     return {
       color: "var(--handrail-bug-success-text)",
@@ -646,10 +695,17 @@ function statusBadgeStyle(group: BugTrackingStatusGroup): CSSProperties {
     };
   }
   if (group === "in_progress") {
+    if (/fix|deploy|verif/iu.test(label)) {
+      return {
+        color: "var(--handrail-bug-warning-text)",
+        borderColor: "color-mix(in srgb, var(--handrail-bug-warning-text) 28%, transparent)",
+        background: "var(--handrail-bug-warning-surface)",
+      };
+    }
     return {
-      color: "var(--handrail-bug-accent)",
-      borderColor: "color-mix(in srgb, var(--handrail-bug-accent) 28%, transparent)",
-      background: "color-mix(in srgb, var(--handrail-bug-accent) 10%, var(--handrail-bug-surface))",
+      color: "var(--handrail-bug-info-text)",
+      borderColor: "color-mix(in srgb, var(--handrail-bug-info-text) 28%, transparent)",
+      background: "var(--handrail-bug-info-surface)",
     };
   }
   return {
@@ -657,6 +713,12 @@ function statusBadgeStyle(group: BugTrackingStatusGroup): CSSProperties {
     borderColor: "var(--handrail-bug-border)",
     background: "var(--handrail-bug-surface-muted)",
   };
+}
+
+function severityColor(severity: string): string {
+  if (/critical|high|urgent/iu.test(severity)) return "var(--handrail-bug-danger-text)";
+  if (/low|minor/iu.test(severity)) return "var(--handrail-bug-success-text)";
+  return "var(--handrail-bug-warning-text)";
 }
 
 const HISTORY_FILTERS: readonly {
@@ -692,12 +754,12 @@ function BugHistoryRow({
       <strong style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 13, lineHeight: 1.35 }}>{bug.title}</strong>
       {bug.reporter_occurrence_count > 1 && <span style={{ display: "block", marginTop: 3, color: "var(--handrail-bug-muted-text)", fontSize: 11 }}>{bug.reporter_occurrence_count} reports</span>}
     </div>
-    <span role="cell" data-handrail-bug-history-cell="secondary" style={{ color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>{bugSeverityLabel(bug.severity)}</span>
+    <span role="cell" data-handrail-bug-history-cell="secondary" style={{ display: "flex", alignItems: "center", gap: 7, color: "var(--handrail-bug-muted-text)", fontSize: 12 }}><span aria-hidden="true" style={{ width: 7, height: 7, flex: "0 0 7px", borderRadius: 999, background: severityColor(bug.severity) }} />{bugSeverityLabel(bug.severity)}</span>
     <span role="cell" data-handrail-bug-history-cell="secondary" style={{ color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>{bugDate(bug.last_reported_at)}</span>
     <span role="cell" data-handrail-bug-history-cell="secondary" style={{ color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>{bug.reported_app_version ? `v${bug.reported_app_version.replace(/^v/iu, "")}` : "—"}</span>
     <span role="cell" data-handrail-bug-history-cell="secondary" title={bug.reported_route || undefined} style={{ overflow: "hidden", color: "var(--handrail-bug-muted-text)", fontSize: 12, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bug.reported_app_flavor || bug.reported_route || "—"}</span>
-    <div role="cell" data-handrail-bug-history-cell="status" style={{ display: "grid", justifyItems: "start", gap: 3 }}>
-      <span style={{ padding: "4px 9px", border: "1px solid", borderRadius: 999, textAlign: "center", fontSize: 11, fontWeight: 800, ...statusBadgeStyle(group) }}>{bug.status_rollup.label}</span>
+    <div role="cell" data-handrail-bug-history-cell="status" style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+      <span style={{ overflow: "hidden", maxWidth: "100%", padding: "3px 8px", border: "1px solid", borderRadius: 999, textAlign: "center", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 10, fontWeight: 800, ...statusBadgeStyle(group, bug.status_rollup.label) }}>{bug.status_rollup.label}</span>
       <span title={bugDate(statusTimestamp)} style={{ color: "var(--handrail-bug-muted-text)", fontSize: 10 }}>{bugRelativeAge(statusTimestamp)}</span>
     </div>
     <div role="cell" data-handrail-bug-history-cell="action" style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
@@ -710,7 +772,7 @@ function BugHistoryRow({
         style={{
           ...styles.historyActionButton,
           color: "var(--handrail-bug-muted-text)",
-          background: "var(--handrail-bug-surface-muted)",
+          background: "transparent",
           cursor: busy ? "wait" : "pointer",
           opacity: busy ? 0.65 : 1,
         }}
@@ -839,18 +901,18 @@ function BugHistory({ onClose }: { readonly onClose: () => void }): ReactElement
 
   return <section aria-label="My bugs" aria-busy={reporter.tracking.status === "loading"} data-handrail-bug-history="true" style={{ display: "flex", width: "100%", minHeight: 0, flex: "1 1 auto", flexDirection: "column", boxSizing: "border-box" }}>
     <div style={styles.historyOverview}>
-      <div style={{ color: "var(--handrail-bug-muted-text)", fontSize: 13 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 9, color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>
         {visibility === "archived"
           ? <><strong style={{ color: "var(--handrail-bug-text)" }}>{total}</strong> archived bug{total === 1 ? "" : "s"}</>
-          : <><strong style={{ color: "var(--handrail-bug-text)" }}>{summary?.needs_attention ?? countFor("needs_attention")}</strong> need attention <span aria-hidden="true">·</span> <strong style={{ color: "var(--handrail-bug-text)" }}>{summary?.in_progress ?? countFor("in_progress")}</strong> in progress</>}
+          : <><span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: 999, background: "var(--handrail-bug-danger-text)" }} /><strong style={{ color: "var(--handrail-bug-text)" }}>{summary?.needs_attention ?? countFor("needs_attention")}</strong> need attention <span aria-hidden="true" style={{ width: 1, height: 16, margin: "0 4px", background: "var(--handrail-bug-border)" }} /><span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: 999, background: "var(--handrail-bug-info-text)" }} /><strong style={{ color: "var(--handrail-bug-text)" }}>{summary?.in_progress ?? countFor("in_progress")}</strong> in progress</>}
       </div>
       <span style={{ color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>
         {reporter.tracking.status === "loading" ? "Updating…" : reporter.tracking.status === "ready" ? "Updated just now" : ""}
       </span>
     </div>
 
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
-      <div role="group" aria-label="Bug history visibility" style={{ display: "flex", gap: 4, padding: 4, border: "1px solid var(--handrail-bug-border)", borderRadius: 12, background: "var(--handrail-bug-surface-muted)" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
+      <div role="group" aria-label="Bug history visibility" style={{ display: "flex", gap: 2, padding: 2, border: "1px solid var(--handrail-bug-border)", borderRadius: 9, background: "var(--handrail-bug-surface-muted)" }}>
         {(["active", "archived"] as const).map((option) => <button
           key={option}
           type="button"
@@ -860,9 +922,9 @@ function BugHistory({ onClose }: { readonly onClose: () => void }): ReactElement
           style={{
             ...styles.tab,
             flex: "0 0 auto",
-            minHeight: 36,
-            padding: "7px 13px",
-            ...(visibility === option ? styles.activeTab : {}),
+            minHeight: 32,
+            padding: "5px 12px",
+            ...(visibility === option ? styles.selectedControl : {}),
           }}
         >{option[0].toUpperCase() + option.slice(1)}</button>)}
       </div>
@@ -892,7 +954,7 @@ function BugHistory({ onClose }: { readonly onClose: () => void }): ReactElement
         <button type="button" aria-expanded={filtersVisible} onClick={() => setFiltersVisible((current) => !current)} style={{
           ...buttonStyle("secondary"),
           flex: "0 0 auto",
-          ...(filtersVisible ? styles.activeTab : {}),
+          ...(filtersVisible ? styles.selectedControl : {}),
         }}>Filters</button>
         <select
           aria-label="Bug sort order"
@@ -916,8 +978,8 @@ function BugHistory({ onClose }: { readonly onClose: () => void }): ReactElement
           onClick={() => chooseStatus(filter.value)}
           style={{
             ...buttonStyle("secondary"),
-            minHeight: 34,
-            padding: "6px 12px",
+            minHeight: 30,
+            padding: "4px 11px",
             borderRadius: 999,
             ...(statusGroup === filter.value ? {
               borderColor: "var(--handrail-bug-accent)",
@@ -927,7 +989,7 @@ function BugHistory({ onClose }: { readonly onClose: () => void }): ReactElement
           }}
         >{filter.label} <span style={{ opacity: 0.75 }}>{countFor(filter.value)}</span></button>)}
       </div>}
-      <div data-handrail-bug-history-disclaimer="true" style={{ margin: "0 0 14px", color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>
+      <div data-handrail-bug-history-disclaimer="true" style={{ margin: "0 0 8px", color: "var(--handrail-bug-muted-text)", fontSize: 10 }}>
         Dismiss and Clear closed only hide bugs from your list; they never change or delete the product team's record.
       </div>
     </form>
@@ -1138,7 +1200,7 @@ function BugReportForm({ onCancel }: { readonly onCancel: () => void }): ReactEl
     {localError && <div role="alert" style={{ ...styles.status, background: "var(--handrail-bug-danger-surface)", color: "var(--handrail-bug-danger-text)" }}>{localError}</div>}
     {message && <div role={message.role} aria-live="polite" style={{ ...styles.status, ...message.style }}>{message.text}</div>}
 
-    <div data-handrail-bug-report-layout="true" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.7fr) minmax(280px, .8fr)", gap: 20, alignItems: "start" }}>
+    <div data-handrail-bug-report-layout="true" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.8fr) minmax(280px, .72fr)", gap: 16, alignItems: "start" }}>
       <section aria-label="Bug details">
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(150px, .3fr)", gap: 12 }}>
           <label style={styles.label}>
@@ -1154,11 +1216,11 @@ function BugReportForm({ onCancel }: { readonly onCancel: () => void }): ReactEl
         </div>
         <label style={styles.label}>
           What happened?
-          <textarea required maxLength={20_000} value={reporter.form.description} onChange={(event) => reporter.updateForm({ description: event.target.value })} placeholder="Describe what you expected and what happened instead. You can paste a screenshot here." style={{ ...styles.input, minHeight: 112, resize: "vertical" }} />
+          <textarea required maxLength={20_000} value={reporter.form.description} onChange={(event) => reporter.updateForm({ description: event.target.value })} placeholder="Describe what you expected and what happened instead. You can paste a screenshot here." style={{ ...styles.input, minHeight: 96, resize: "vertical" }} />
         </label>
         <label style={styles.label}>
           <span>Steps to reproduce <span style={{ marginLeft: 6, color: "var(--handrail-bug-muted-text)", fontSize: 11, fontWeight: 500 }}>Optional</span></span>
-          <textarea maxLength={20_000} value={reporter.form.reproducer || ""} onChange={(event) => reporter.updateForm({ reproducer: event.target.value || undefined })} placeholder="1. Open…  2. Click…  3. See…" style={{ ...styles.input, minHeight: 78, resize: "vertical" }} />
+          <textarea maxLength={20_000} value={reporter.form.reproducer || ""} onChange={(event) => reporter.updateForm({ reproducer: event.target.value || undefined })} placeholder="1. Open…  2. Click…  3. See…" style={{ ...styles.input, minHeight: 64, resize: "vertical" }} />
         </label>
 
         {reporter.canAttachScreenshot && <div
@@ -1201,19 +1263,19 @@ function BugReportForm({ onCancel }: { readonly onCancel: () => void }): ReactEl
         </div>}
       </section>
 
-      <aside data-handrail-bug-context="true" aria-label="Attached context and options" style={{ display: "grid", gap: 12 }}>
-        <section style={{ overflow: "hidden", border: "1px solid var(--handrail-bug-border)", borderRadius: 12, background: "var(--handrail-bug-surface)" }}>
-          <h3 style={{ margin: 0, padding: "12px 14px", borderBottom: "1px solid var(--handrail-bug-border)", fontSize: 13 }}>Attached context</h3>
+      <aside data-handrail-bug-context="true" aria-label="Attached context and options" style={{ display: "grid", gap: 10 }}>
+        <section style={{ overflow: "hidden", border: "1px solid var(--handrail-bug-border)", borderRadius: 9, background: "var(--handrail-bug-surface)" }}>
+          <h3 style={{ margin: 0, padding: "9px 12px", borderBottom: "1px solid var(--handrail-bug-border)", fontSize: 12 }}>Attached context</h3>
           {([
             ["Current page", reporter.form.route || "Not provided"],
             ["App version", reporter.form.appVersion || "Not provided"],
             ["Environment", reporter.reporter.configuration.environment || "Not provided"],
             ["Build", reporter.form.buildNumber || "Not provided"],
-          ] as const).map(([label, value]) => <div key={label} style={{ display: "grid", gridTemplateColumns: "110px minmax(0, 1fr)", gap: 12, padding: "10px 14px", borderBottom: "1px solid var(--handrail-bug-border)", fontSize: 12 }}>
+          ] as const).map(([label, value]) => <div key={label} style={{ display: "grid", gridTemplateColumns: "100px minmax(0, 1fr)", gap: 10, padding: "8px 12px", borderBottom: "1px solid var(--handrail-bug-border)", fontSize: 11 }}>
             <span style={{ color: "var(--handrail-bug-muted-text)" }}>{label}</span>
             <strong title={value} style={{ overflow: "hidden", textAlign: "right", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</strong>
           </div>)}
-          <p style={{ margin: 0, padding: "11px 14px", color: "var(--handrail-bug-muted-text)", background: "var(--handrail-bug-surface-muted)", fontSize: 11 }}>Only context shown here is included with this report.</p>
+          <p style={{ margin: 0, padding: "8px 12px", color: "var(--handrail-bug-muted-text)", background: "var(--handrail-bug-surface-muted)", fontSize: 10 }}>Only context shown here is included with this report.</p>
         </section>
 
         {reporter.policyStatus === "loading" && <div role="status" style={{ color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>Checking optional actions…</div>}
@@ -1362,17 +1424,17 @@ export function HandrailBugReporterDialog({
       <header data-handrail-bug-reporter-header="true" style={styles.header}>
         <div style={{ minWidth: 0 }}>
           <div style={{ marginBottom: 4, color: "var(--handrail-bug-accent)", fontSize: 10, fontWeight: 800, letterSpacing: "0.14em" }}>HELP US FIX IT</div>
-          <h2 id={headingId} style={{ margin: 0, fontSize: 22, lineHeight: 1.2, letterSpacing: "-0.02em" }}>{heading}</h2>
+          <h2 id={headingId} style={{ margin: 0, fontSize: 20, lineHeight: 1.2, letterSpacing: "-0.02em" }}>{heading}</h2>
           <div id={descriptionId} style={{ marginTop: 4, color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>Describe the issue and review the attached context before sending.</div>
         </div>
-        <button type="button" aria-label="Close bug reporter" disabled={reporter.submission.status === "submitting"} onClick={closeDialog} style={{ ...buttonStyle("secondary"), width: 44, minWidth: 44, height: 44, padding: 0, fontSize: 22, lineHeight: 1, opacity: reporter.submission.status === "submitting" ? 0.65 : 1 }}>×</button>
+        <button type="button" aria-label="Close bug reporter" disabled={reporter.submission.status === "submitting"} onClick={closeDialog} style={{ ...buttonStyle("secondary"), width: 38, minWidth: 38, height: 38, padding: 0, fontSize: 20, lineHeight: 1, opacity: reporter.submission.status === "submitting" ? 0.65 : 1 }}>×</button>
       </header>
       <div data-handrail-bug-reporter-content={tab} style={{ ...styles.content, ...(tab === "history" ? styles.historyContent : {}) }}>
         {showHistory && <div role="tablist" aria-label="Bug reporter views" data-handrail-bug-reporter-tabs="true" style={styles.tabs}>
           <button id={reportTabId} type="button" role="tab" aria-controls={reportPanelId} aria-selected={tab === "report"} tabIndex={tab === "report" ? 0 : -1} onClick={() => selectTab("report")} style={{ ...styles.tab, ...(tab === "report" ? styles.activeTab : {}) }}>Report a bug</button>
           <button id={historyTabId} type="button" role="tab" aria-controls={historyPanelId} aria-selected={tab === "history"} tabIndex={tab === "history" ? 0 : -1} onClick={() => selectTab("history")} style={{ ...styles.tab, ...(tab === "history" ? styles.activeTab : {}) }}>
             <span>My bugs</span>
-            {historyCount !== null && <span aria-label={`${historyCount} total`} style={{ display: "inline-grid", placeItems: "center", minWidth: 24, height: 24, marginLeft: 9, padding: "0 6px", borderRadius: 999, color: tab === "history" ? "var(--handrail-bug-accent)" : "var(--handrail-bug-muted-text)", background: tab === "history" ? "color-mix(in srgb, var(--handrail-bug-accent) 12%, var(--handrail-bug-surface))" : "var(--handrail-bug-surface)", fontSize: 12 }}>{historyCount}</span>}
+            {historyCount !== null && <span aria-label={`${historyCount} total`} style={{ display: "inline-grid", placeItems: "center", minWidth: 22, height: 22, marginLeft: 8, padding: "0 6px", borderRadius: 999, color: tab === "history" ? "var(--handrail-bug-accent-text)" : "var(--handrail-bug-muted-text)", background: tab === "history" ? "color-mix(in srgb, var(--handrail-bug-accent-text) 18%, transparent)" : "var(--handrail-bug-surface-muted)", fontSize: 11 }}>{historyCount}</span>}
           </button>
         </div>}
         {tab === "report"
