@@ -28,6 +28,20 @@ export type {
   StampedBugReport,
 } from "./identity";
 export {
+  BUG_IMPACTS,
+  BUG_SEVERITY_OPTIONS,
+  HANDRAIL_BUG_SEVERITIES,
+  bugImpactLabel,
+  bugSeverityOption,
+  handrailBugSeverity,
+  normalizeBugImpact,
+} from "./severity";
+export type {
+  BugImpact,
+  BugSeverityOption,
+  HandrailBugSeverity,
+} from "./severity";
+export {
   APPLICATION_SESSION_TOKEN_HEADER,
   AUTOMATION_OPTIONS,
   BUG_TRACKING_SORTS,

@@ -24,6 +24,10 @@ import {
   type ScreenshotAttachment,
   type TrackedBugRecord,
 } from "./reporter";
+import {
+  BUG_SEVERITY_OPTIONS,
+  bugImpactLabel,
+} from "./severity";
 
 export type HandrailBugReporterThemeMode = "auto" | "light" | "dark";
 
@@ -542,12 +546,7 @@ function bugRelativeAge(value: string | null): string {
 }
 
 function bugSeverityLabel(value: string): string {
-  const normalized = value.trim().toLowerCase();
-  if (normalized === "sev1") return "Critical";
-  if (normalized === "sev2") return "High";
-  if (normalized === "sev3") return "Medium";
-  if (normalized === "sev4") return "Low";
-  return value.toUpperCase();
+  return bugImpactLabel(value) || value.toUpperCase();
 }
 
 function bugStatusGroup(bug: TrackedBugRecord): BugTrackingStatusGroup {
@@ -988,6 +987,7 @@ function BugReportForm({ onCancel }: { readonly onCancel: () => void }): ReactEl
     reporter.updateForm({
       title: "",
       description: "",
+      impact: "moderate",
       severity: undefined,
       reproducer: undefined,
       screenshot: null,
@@ -1062,6 +1062,39 @@ function BugReportForm({ onCancel }: { readonly onCancel: () => void }): ReactEl
         style={styles.input}
       />
     </label>
+    <fieldset style={styles.fieldset}>
+      <legend style={{ padding: "0 5px", fontWeight: 700 }}>Impact</legend>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8 }}>
+        {BUG_SEVERITY_OPTIONS.map((option) => {
+          const selected = reporter.form.impact === option.impact;
+          return <label key={option.impact} style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 7,
+            minHeight: 42,
+            border: `1px solid ${selected ? "var(--handrail-bug-accent)" : "var(--handrail-bug-border)"}`,
+            borderRadius: 10,
+            background: selected ? "color-mix(in srgb, var(--handrail-bug-accent) 10%, var(--handrail-bug-surface))" : "var(--handrail-bug-surface)",
+            color: selected ? "var(--handrail-bug-accent)" : "var(--handrail-bug-text)",
+            cursor: "pointer",
+            fontSize: 13,
+            fontWeight: 700,
+          }}>
+            <input
+              aria-label={`${option.label} impact`}
+              type="radio"
+              name="handrail-bug-impact"
+              value={option.impact}
+              checked={selected}
+              onChange={() => reporter.updateForm({ impact: option.impact, severity: undefined })}
+              style={{ accentColor: "var(--handrail-bug-accent)" }}
+            />
+            {option.label}
+          </label>;
+        })}
+      </div>
+    </fieldset>
     <label style={styles.label}>
       What happened?
       <textarea
@@ -1217,6 +1250,7 @@ export function HandrailBugReporterDialog({
       reporter.updateForm({
         title: "",
         description: "",
+        impact: "moderate",
         severity: undefined,
         reproducer: undefined,
         screenshot: null,

@@ -1,4 +1,9 @@
 import type { ReporterSdkIdentity, StampedBugReport } from "./identity";
+import {
+  normalizeBugImpact,
+  type BugImpact,
+  type HandrailBugSeverity,
+} from "./severity";
 
 export const APPLICATION_SESSION_TOKEN_HEADER =
   "x-handrail-application-session-token" as const;
@@ -89,7 +94,10 @@ export interface ScreenshotAttachment {
 export interface BugReportInput {
   readonly title: string;
   readonly description: string;
-  readonly severity?: "sev1" | "sev2" | "sev3" | "sev4" | string;
+  /** Canonical cross-SDK impact. New integrations should use this field. */
+  readonly impact?: BugImpact;
+  /** @deprecated Use impact. Legacy labels and sev1..sev4 remain accepted. */
+  readonly severity?: BugImpact | HandrailBugSeverity | "medium" | (string & {});
   readonly route?: string;
   readonly appVersion?: string;
   readonly buildNumber?: string;
@@ -225,6 +233,7 @@ export interface TrackedBugRecord {
   readonly id: string;
   readonly title: string;
   readonly severity: string;
+  readonly impact: BugImpact;
   readonly environment: string;
   readonly status: string;
   /** Stable semantic group for app-owned filters and status styling. */
@@ -907,12 +916,13 @@ function trackedBugRecord(input: unknown): TrackedBugRecord | null {
   const id = nullableString(record?.id);
   const title = nullableString(record?.title);
   const severity = nullableString(record?.severity);
+  const impact = normalizeBugImpact(record?.canonical_impact ?? severity);
   const environment = nullableString(record?.environment);
   const status = nullableString(record?.status);
   const label = nullableString(rollup?.label);
   const rawStatus = nullableString(rollup?.raw_status);
   if (
-    !record || !id || !title || !severity || !environment || !status || !label
+    !record || !id || !title || !severity || !impact || !environment || !status || !label
     || !rawStatus || !stage || !BUG_TRACKING_STAGES.has(stage)
     || typeof rollup?.terminal !== "boolean"
   ) {
@@ -940,6 +950,7 @@ function trackedBugRecord(input: unknown): TrackedBugRecord | null {
     id,
     title,
     severity,
+    impact,
     environment,
     status,
     status_group: statusGroup,
@@ -1713,7 +1724,7 @@ export class HandrailBugReporterClient {
       redactSensitiveValues({
         title: input.title,
         description: input.description,
-        severity: input.severity,
+        severity: normalizeBugImpact(input.impact ?? input.severity) || undefined,
         route: input.route,
         app_version: input.appVersion,
         build_number: input.buildNumber,

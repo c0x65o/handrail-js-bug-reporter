@@ -38,6 +38,10 @@ import {
   type ScreenshotAttachment,
   type TrackedBugRecord,
 } from "./reporter";
+import {
+  normalizeBugImpact,
+  type BugImpact,
+} from "./severity";
 
 export {
   REPORT_SOURCE,
@@ -140,6 +144,8 @@ export function createBugReporter(config: BugReporterConfig) {
 export interface BugReporterFormState {
   readonly title: string;
   readonly description: string;
+  readonly impact: BugImpact;
+  /** @deprecated Use impact. */
   readonly severity?: string;
   readonly route?: string;
   readonly appVersion?: string;
@@ -254,6 +260,7 @@ function initialFormState(
   return {
     title: initial?.title || "",
     description: initial?.description || "",
+    impact: normalizeBugImpact(initial?.impact ?? initial?.severity) || "moderate",
     severity: initial?.severity,
     route: initial?.route,
     appVersion: initial?.appVersion,
@@ -404,6 +411,7 @@ export function HandrailBugReporterProvider({
       const input: BugReportInput = {
         title: form.title,
         description: form.description,
+        impact: form.impact,
         severity: form.severity,
         route: form.route,
         appVersion: form.appVersion,
