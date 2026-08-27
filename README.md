@@ -383,9 +383,6 @@ bug or another user's list:
 await reporter.archiveBug(bugId);
 await reporter.restoreBug(bugId);
 
-const result = await reporter.archiveClosedBugs();
-console.log(result.archivedCount);
-
 const archived = await reporter.listBugs({
   visibility: "archived",
   sort: "newest",
@@ -395,9 +392,8 @@ const archived = await reporter.listBugs({
 History visibility is `active` by default and also accepts `archived` or `all`.
 Rows expose `archived` and `archived_at`. An archive records the latest owned
 submission time, so a new report of the same canonical bug automatically makes
-it active again. Prefer a bulk UI label such as **Clear closed** with an
-explanation that the action only hides bugs from the current user's list, and
-provide an Archived view with restore.
+it active again. The packaged tracker offers individual **Archive** and
+**Restore** actions and deliberately provides no bulk clear action.
 
 `status_rollup.stage` is one of `submitted`, `verifying`, `verified`, `fixing`,
 `fixed`, `deployed`, `closed`, `not_reproduced`, `wont_fix`, or
@@ -467,7 +463,7 @@ clipboard paste, or drag and drop, an immediate thumbnail with Replace/Remove
 actions, policy-derived Ask controls,
 an unchecked report-scoped update consent control when the verified user is
 eligible, and an owned **My bugs** view with search, status/visibility/sort
-filters, keyset pagination, archive, restore, and **Clear closed**.
+filters, keyset pagination, and individual archive and restore actions.
 After Handrail accepts a report, the form is replaced by a dedicated thank-you
 screen rather than leaving submitted fields editable. It confirms whether
 email updates were enabled, keeps notification failure separate from report
@@ -510,7 +506,7 @@ text, and bounds itself to the available viewport.
 The packaged history view uses the same appearance contract and provides a
 dense desktop tracker table with a responsive mobile-card layout, semantic
 status badges, active/archived visibility, status counts, search, sort,
-dismiss/restore actions, bounded pagination, and expandable row details.
+archive/restore actions, bounded pagination, and expandable row details.
 Applications can brand it with tokens, but do not need to rebuild those
 controls to get the production-ready default presentation.
 

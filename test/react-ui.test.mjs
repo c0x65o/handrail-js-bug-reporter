@@ -464,7 +464,7 @@ test("the packaged form hides notification consent without a Known User email", 
   await act(async () => renderer.unmount());
 });
 
-test("My bugs uses the provider history, filter, archive, restore, and clear-closed actions", async () => {
+test("My bugs uses the provider history, filters, and individual archive and restore actions", async () => {
   const requests = [];
   let archived = false;
   const fetch = async (url, init) => {
@@ -478,7 +478,6 @@ test("My bugs uses the provider history, filter, archive, restore, and clear-clo
       archived = false;
       return jsonResponse({ contract_version: "v1", bug_id: "bug-1", archived: false, archived_at: null });
     }
-    if (init.method === "POST") return jsonResponse({ contract_version: "v1", archived_count: 1 });
     const closedBug = trackedBug("bug-closed");
     return jsonResponse({
       contract_version: "v1",
@@ -523,6 +522,9 @@ test("My bugs uses the provider history, filter, archive, restore, and clear-clo
   assert.equal(renderer.root.findByProps({ role: "dialog" }).props.style.height, "min(960px, calc(100dvh - 16px))");
   assert.equal(renderer.root.findByProps({ role: "table" }).props["aria-label"], "Reported bugs");
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-history-row": "true" }).length, 2);
+  assert.ok(renderer.root.findAllByType("span").some((node) => (
+    /^Updated .+ ago$/u.test(node.children.join(""))
+  )));
   const [, selectedMyBugsTab] = renderer.root.findAllByProps({ role: "tab" });
   assert.equal(selectedMyBugsTab.props.style.color, "var(--handrail-bug-accent-text)");
   assert.equal(selectedMyBugsTab.props.style.background, "var(--handrail-bug-accent)");
@@ -532,20 +534,18 @@ test("My bugs uses the provider history, filter, archive, restore, and clear-clo
   const filtersButton = renderer.root.findByProps({ children: "Filters" });
   assert.equal(filtersButton.props["aria-expanded"], true);
   assert.match(filtersButton.props.style.background, /var\(--handrail-bug-accent\) 8%/u);
-  const clearClosedButton = renderer.root.findByProps({ children: "Clear closed (1)" });
-  assert.equal(clearClosedButton.props.style.border, 0);
-  assert.equal(clearClosedButton.props.style.background, "transparent");
   const viewButton = renderer.root.findByProps({ "aria-label": "View Bug bug-1" });
-  const dismissButton = renderer.root.findByProps({ "aria-label": "Dismiss Bug bug-1" });
+  const archiveButton = renderer.root.findByProps({ "aria-label": "Archive Bug bug-1" });
   assert.equal(viewButton.props.style.background, "transparent");
-  assert.equal(dismissButton.props.style.background, "transparent");
+  assert.equal(archiveButton.props.style.background, "transparent");
   assert.equal(viewButton.props.style.border, 0);
-  assert.equal(dismissButton.props.style.border, 0);
+  assert.equal(archiveButton.props.style.border, 0);
+  assert.equal(renderer.root.findAllByProps({ children: "Clear closed (1)" }).length, 0);
   await act(async () => viewButton.props.onClick());
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-history-detail": "true" }).length, 1);
   assert.deepEqual(renderer.root.findByProps({ "aria-label": "Bug history visibility" }).findAllByType("button").map((button) => button.children.join("")), ["Active", "Archived"]);
 
-  await act(async () => renderer.root.findByProps({ "aria-label": "Dismiss Bug bug-1" }).props.onClick());
+  await act(async () => renderer.root.findByProps({ "aria-label": "Archive Bug bug-1" }).props.onClick());
   assert.equal(archived, true);
   await act(async () => renderer.root.findByProps({ "aria-label": "Restore Bug bug-1" }).props.onClick());
   assert.equal(archived, false);
@@ -555,8 +555,7 @@ test("My bugs uses the provider history, filter, archive, restore, and clear-clo
   await act(async () => new Promise((resolve) => setTimeout(resolve, 350)));
   assert.ok(requests.some((request) => request.url.includes("search=checkout")));
 
-  await act(async () => renderer.root.findByProps({ children: "Clear closed (1)" }).props.onClick());
-  assert.ok(requests.some((request) => request.method === "POST" && request.url.includes("archive-closed")));
+  assert.equal(requests.some((request) => request.method === "POST" && request.url.includes("archive-closed")), false);
   assert.ok(requests.some((request) => request.method === "PUT"));
   assert.ok(requests.some((request) => request.method === "DELETE"));
   await act(async () => renderer.unmount());

@@ -491,21 +491,6 @@ const styles: Record<string, CSSProperties> = {
     lineHeight: 1.2,
     outlineOffset: 2,
   },
-  clearClosedButton: {
-    appearance: "none",
-    WebkitAppearance: "none",
-    minHeight: 34,
-    padding: "6px 10px",
-    border: 0,
-    borderRadius: 9,
-    color: "var(--handrail-bug-accent)",
-    background: "transparent",
-    cursor: "pointer",
-    font: "inherit",
-    fontSize: 12,
-    fontWeight: 700,
-    outlineOffset: 2,
-  },
   status: { marginBottom: 10, borderRadius: 8, padding: "9px 12px", fontSize: 12 },
   historyControls: {
     display: "flex",
@@ -662,15 +647,15 @@ function bugRelativeAge(value: string | null): string {
   const timestamp = new Date(value).valueOf();
   if (Number.isNaN(timestamp)) return "Unknown age";
   const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
-  if (seconds < 60) return "Just now";
+  if (seconds < 60) return "Updated just now";
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 60) return `Updated ${minutes} min ago`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"}`;
+  if (hours < 24) return `Updated ${hours} hour${hours === 1 ? "" : "s"} ago`;
   const days = Math.floor(hours / 24);
-  if (days < 30) return `${days} day${days === 1 ? "" : "s"}`;
+  if (days < 30) return `Updated ${days} day${days === 1 ? "" : "s"} ago`;
   const months = Math.floor(days / 30);
-  return `${months} month${months === 1 ? "" : "s"}`;
+  return `Updated ${months} month${months === 1 ? "" : "s"} ago`;
 }
 
 function bugSeverityLabel(value: string): string {
@@ -772,7 +757,7 @@ function BugHistoryRow({
       <button
         type="button"
         disabled={busy}
-        aria-label={`${bug.archived ? "Restore" : "Dismiss"} ${bug.title}`}
+        aria-label={`${bug.archived ? "Restore" : "Archive"} ${bug.title}`}
         onClick={() => void (bug.archived ? onRestore(bug.id) : onArchive(bug.id))}
         style={{
           ...styles.historyActionButton,
@@ -782,7 +767,7 @@ function BugHistoryRow({
           opacity: busy ? 0.65 : 1,
         }}
       >
-        {busy ? "Updating…" : bug.archived ? "Restore" : "Dismiss"}
+        {busy ? "Updating…" : bug.archived ? "Restore" : "Archive"}
       </button>
     </div>
     {expanded && <div role="cell" data-handrail-bug-history-detail="true" style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, padding: "10px 12px", border: "1px solid var(--handrail-bug-border)", borderRadius: 9, color: "var(--handrail-bug-muted-text)", background: "var(--handrail-bug-surface-muted)", fontSize: 11 }}>
@@ -848,18 +833,6 @@ function BugHistory({ onClose }: { readonly onClose: () => void }): ReactElement
       else await reporter.restoreBug(bugId);
     } catch (error) {
       setHistoryActionError(error instanceof Error ? error.message : "Bug history could not be updated.");
-    } finally {
-      setBusyBugId(null);
-    }
-  };
-
-  const clearClosed = async () => {
-    setBusyBugId("__closed__");
-    setHistoryActionError(null);
-    try {
-      await reporter.archiveClosedBugs();
-    } catch (error) {
-      setHistoryActionError(error instanceof Error ? error.message : "Closed bugs could not be archived.");
     } finally {
       setBusyBugId(null);
     }
@@ -933,9 +906,6 @@ function BugHistory({ onClose }: { readonly onClose: () => void }): ReactElement
           }}
         >{option[0].toUpperCase() + option.slice(1)}</button>)}
       </div>
-      {visibility !== "archived" && (summary?.closed ?? 0) > 0 && <button type="button" disabled={busyBugId !== null} onClick={() => void clearClosed()} style={{ ...styles.clearClosedButton, cursor: busyBugId ? "wait" : "pointer", opacity: busyBugId ? 0.65 : 1 }}>
-        {busyBugId === "__closed__" ? "Clearing…" : `Clear closed (${summary?.closed ?? 0})`}
-      </button>}
     </div>
 
     <form
@@ -995,7 +965,7 @@ function BugHistory({ onClose }: { readonly onClose: () => void }): ReactElement
         >{filter.label} <span style={{ opacity: 0.75 }}>{countFor(filter.value)}</span></button>)}
       </div>}
       <div data-handrail-bug-history-disclaimer="true" style={{ margin: "0 0 8px", color: "var(--handrail-bug-muted-text)", fontSize: 10 }}>
-        Dismiss and Clear closed only hide bugs from your list; they never change or delete the product team's record.
+        Archive only hides a bug from your list; it never changes or deletes the product team's record.
       </div>
     </form>
 
