@@ -293,6 +293,21 @@ function normalizeForwardedPayload(
     delete body.automation_requests;
   }
 
+  const notification = body.reporter_notification;
+  if (notification && typeof notification === "object" && !Array.isArray(notification)) {
+    const preference = notification as Record<string, unknown>;
+    if (preference.notify_on_resolution === true) {
+      body.reporter_notification = {
+        notify_on_resolution: true,
+        consent_version: clean(preference.consent_version) || "v1",
+      };
+    } else {
+      delete body.reporter_notification;
+    }
+  } else {
+    delete body.reporter_notification;
+  }
+
   // These values are server-owned headers and can never be supplied in JSON.
   delete body.application_session_token;
   delete body.report_token;

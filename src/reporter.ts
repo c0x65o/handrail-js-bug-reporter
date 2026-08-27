@@ -866,6 +866,21 @@ function nullableString(input: unknown): string | null {
   return typeof input === "string" && input.trim() ? input.trim() : null;
 }
 
+function notificationSubscriptionFromResponse(
+  input: unknown,
+): ReporterNotificationSubscription | null {
+  const subscription = plainRecord(
+    plainRecord(input)?.notification_subscription,
+  );
+  if (subscription?.active !== true) return null;
+  return Object.freeze({
+    active: true,
+    created: subscription.created === true,
+    recipientHint: nullableString(subscription.recipient_hint),
+    subscribedAt: nullableString(subscription.subscribed_at),
+  });
+}
+
 function nonNegativeNumber(input: unknown, fallback: number): number {
   const value = Number(input);
   return Number.isFinite(value) && value >= 0 ? value : fallback;
@@ -1374,13 +1389,26 @@ export class HandrailBugReporterClient {
     } catch {
       responseBody = null;
     }
-    const bugId = nullableString(plainRecord(responseBody)?.bug_id);
+    const responseRecord = plainRecord(responseBody);
+    const bugId = nullableString(responseRecord?.bug_id);
     let notificationSubscription: ReporterNotificationSubscription | null = null;
     let notificationWarning: string | null = null;
     if (input.notification?.notifyOnResolution === true) {
-      if (!bugId) {
+      const hasInlineSubscriptionResult = Boolean(
+        responseRecord
+        && Object.prototype.hasOwnProperty.call(
+          responseRecord,
+          "notification_subscription",
+        ),
+      );
+      notificationSubscription = notificationSubscriptionFromResponse(
+        responseRecord,
+      );
+      if (hasInlineSubscriptionResult && !notificationSubscription) {
         notificationWarning = "The report was sent, but update notifications could not be enabled.";
-      } else {
+      } else if (!hasInlineSubscriptionResult && !bugId) {
+        notificationWarning = "The report was sent, but update notifications could not be enabled.";
+      } else if (!hasInlineSubscriptionResult && bugId) {
         try {
           notificationSubscription = await this.subscribeToUpdates(
             bugId,
@@ -1456,19 +1484,14 @@ export class HandrailBugReporterClient {
     } catch {
       response = null;
     }
-    const subscription = plainRecord(response?.notification_subscription);
-    if (subscription?.active !== true) {
+    const subscription = notificationSubscriptionFromResponse(response);
+    if (!subscription) {
       throw new BugReporterError(
         "submission_rejected",
         "Update notifications could not be enabled.",
       );
     }
-    return Object.freeze({
-      active: true,
-      created: subscription.created === true,
-      recipientHint: nullableString(subscription.recipient_hint),
-      subscribedAt: nullableString(subscription.subscribed_at),
-    });
+    return subscription;
   }
 
   /**
@@ -1733,6 +1756,13 @@ export class HandrailBugReporterClient {
     };
     const profileKey = cleanString(input.profileKey);
     if (profileKey) payload.profile_key = profileKey;
+    if (input.notification?.notifyOnResolution === true) {
+      payload.reporter_notification = {
+        notify_on_resolution: true,
+        consent_version:
+          cleanString(input.notification.consentVersion) || "v1",
+      };
+    }
     if (input.screenshot) {
       if (!this.allowScreenshots) throw screenshotError();
       const screenshot = await normalizeScreenshot(input.screenshot);

@@ -405,10 +405,46 @@ test("submission retries idempotently with fresh session headers and filtered au
   );
 });
 
-test("report-scoped notification opt-in is a separate request and cannot undo report acceptance", async () => {
+test("report-scoped notification opt-in is persisted by the report request", async () => {
   const requests = [];
   const reporter = createBugReporter(reporterConfig({
     applicationSessionTokenProvider: () => "verified-session",
+    fetch: async (url, init) => {
+      requests.push({ url: String(url), init });
+      return jsonResponse({
+        bug_id: "bug-notify-1",
+        notification_subscription: {
+          active: true,
+          created: true,
+          recipient_hint: "r***@example.com",
+          subscribed_at: "2026-08-25T12:00:00.000Z",
+        },
+      }, 201);
+    },
+  }));
+
+  const result = await reporter.submit({
+    title: "Checkout failure",
+    description: "Continue does not work.",
+    notification: {
+      notifyOnResolution: true,
+    },
+  });
+
+  assert.equal(requests.length, 1);
+  assert.equal(new URL(requests[0].url).pathname, "/api/mobile-bug-reports");
+  assert.deepEqual(JSON.parse(requests[0].init.body).reporter_notification, {
+    notify_on_resolution: true,
+    consent_version: "v1",
+  });
+  assert.equal(result.status, "submitted");
+  assert.equal(result.notificationSubscription.active, true);
+  assert.equal(result.notificationWarning, null);
+});
+
+test("notification opt-in falls back to the child route for older servers", async () => {
+  const requests = [];
+  const reporter = createBugReporter(reporterConfig({
     fetch: async (url, init) => {
       requests.push({ url: String(url), init });
       if (String(url).includes("/subscription")) {
@@ -421,25 +457,17 @@ test("report-scoped notification opt-in is a separate request and cannot undo re
           },
         }, 201);
       }
-      return jsonResponse({ bug_id: "bug-notify-1" }, 201);
+      return jsonResponse({ bug_id: "bug-notify-legacy" }, 201);
     },
   }));
 
   const result = await reporter.submit({
     title: "Checkout failure",
     description: "Continue does not work.",
-    notification: {
-      notifyOnResolution: true,
-    },
+    notification: { notifyOnResolution: true },
   });
 
   assert.equal(requests.length, 2);
-  assert.equal(new URL(requests[0].url).pathname, "/api/mobile-bug-reports");
-  assert.equal(
-    new URL(requests[1].url).pathname,
-    "/api/mobile-bug-reports/bugs/bug-notify-1/subscription",
-  );
-  assert.equal(JSON.parse(requests[0].init.body).reporter_notification, undefined);
   assert.deepEqual(JSON.parse(requests[1].init.body), {
     reporter_notification: {
       notify_on_resolution: true,

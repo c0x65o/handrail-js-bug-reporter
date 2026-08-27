@@ -216,17 +216,15 @@ test("the packaged form delegates upload, paste, drop, thumbnail, policy, automa
   const fetch = async (url, init) => {
     requests.push({ url: String(url), init });
     if (init.method === "GET") return jsonResponse(reporterPolicy);
-    if (String(url).includes("/subscription")) {
-      return jsonResponse({
-        notification_subscription: {
-          active: true,
-          created: true,
-          recipient_hint: "j***@example.com",
-          subscribed_at: "2026-08-26T14:00:00.000Z",
-        },
-      }, 201);
-    }
-    return jsonResponse({ bug_id: "bug-ui-1" }, 201);
+    return jsonResponse({
+      bug_id: "bug-ui-1",
+      notification_subscription: {
+        active: true,
+        created: true,
+        recipient_hint: "j***@example.com",
+        subscribed_at: "2026-08-26T14:00:00.000Z",
+      },
+    }, 201);
   };
   let renderer;
   await act(async () => {
@@ -318,14 +316,11 @@ test("the packaged form delegates upload, paste, drop, thumbnail, policy, automa
   assert.equal(submitted.reproducer, "1. Open checkout. 2. Click Continue.");
   assert.equal(submitted.screenshot_mime_type, "image/png");
   assert.deepEqual(submitted.automation_requests, { fix: true });
-  const subscription = requests.find((request) => request.url.includes("/subscription"));
-  assert.ok(subscription);
-  assert.deepEqual(JSON.parse(subscription.init.body), {
-    reporter_notification: {
-      notify_on_resolution: true,
-      consent_version: "v1",
-    },
+  assert.deepEqual(submitted.reporter_notification, {
+    notify_on_resolution: true,
+    consent_version: "v1",
   });
+  assert.equal(requests.some((request) => request.url.includes("/subscription")), false);
   const success = renderer.root.findByProps({ "data-handrail-bug-submission-success": "true" });
   assert.ok(success);
   assert.equal(renderer.root.findAllByProps({ children: "Thanks for submitting this bug" }).length, 1);
@@ -342,15 +337,18 @@ test("the packaged form delegates upload, paste, drop, thumbnail, policy, automa
 });
 
 test("a notification failure still shows a thank-you screen and clearly confirms the bug was saved", async () => {
+  const requests = [];
   const fetch = async (url, init) => {
+    requests.push({ url: String(url), init });
     if (init.method === "GET") return jsonResponse(reporterPolicy);
-    if (String(url).includes("/subscription")) {
-      return jsonResponse({
-        error: "The feedback report was not found.",
-        code: "feedback_notification_report_not_found",
-      }, 404);
-    }
-    return jsonResponse({ bug_id: "bug-ui-warning" }, 201);
+    return jsonResponse({
+      bug_id: "bug-ui-warning",
+      notification_subscription: null,
+      intake_warnings: [{
+        code: "feedback_notification_subscription_failed",
+        message: "The report was accepted, but update notifications could not be enabled.",
+      }],
+    }, 201);
   };
   let renderer;
   await act(async () => {
@@ -378,6 +376,7 @@ test("a notification failure still shows a thank-you screen and clearly confirms
 
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-submission-success": "true" }).length, 1);
   assert.match(renderer.root.findByProps({ role: "alert" }).children.join(""), /bug is saved/i);
+  assert.equal(requests.some((request) => request.url.includes("/subscription")), false);
   assert.equal(renderer.root.findAllByProps({ placeholder: "What is broken?" }).length, 0);
   await act(async () => renderer.unmount());
 });

@@ -119,7 +119,15 @@ test("same-origin forwarding keeps HttpOnly cookies and server secrets out of br
         assert.equal(init.headers.cookie, undefined);
         return init.method === "GET"
           ? jsonResponse(policy)
-          : jsonResponse({ bug_id: "forwarded" }, 201);
+          : jsonResponse({
+              bug_id: "forwarded",
+              notification_subscription: {
+                active: true,
+                created: true,
+                recipient_hint: "r***@example.com",
+                subscribed_at: "2026-08-26T12:00:00.000Z",
+              },
+            }, 201);
       },
     }),
   );
@@ -150,6 +158,7 @@ test("same-origin forwarding keeps HttpOnly cookies and server secrets out of br
       title: "Forwarded issue",
       description: "Uses an HttpOnly application session.",
       route: "/settings",
+      notification: { notifyOnResolution: true },
     },
     { automationRequests: ["fix"] },
   );
@@ -178,6 +187,10 @@ test("same-origin forwarding keeps HttpOnly cookies and server secrets out of br
   );
   const forwardedBody = JSON.parse(upstreamRequests[1].init.body);
   assert.equal(forwardedBody.automation_requests.fix, true);
+  assert.deepEqual(forwardedBody.reporter_notification, {
+    notify_on_resolution: true,
+    consent_version: "v1",
+  });
   assert.equal(forwardedBody.reporter_sdk_runtime, "browser");
   assert.doesNotMatch(
     upstreamRequests[1].init.body,
