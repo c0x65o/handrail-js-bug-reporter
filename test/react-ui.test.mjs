@@ -305,8 +305,18 @@ test("the packaged form delegates upload, paste, drop, thumbnail, policy, automa
   await act(async () => automation.props.onChange({ target: { checked: true } }));
   await act(async () => renderer.root.findByProps({ "aria-label": "Email me when this bug is fixed" }).props.onChange({ target: { checked: true } }));
   assert.equal(renderer.root.findByProps({ "aria-label": "Email me when this bug is fixed" }).props.checked, true);
-  assert.equal(renderer.root.findByProps({ "aria-label": "Moderate impact" }).props.checked, true);
-  await act(async () => renderer.root.findByProps({ "aria-label": "High impact" }).props.onChange());
+  const severity = renderer.root.findByProps({ "aria-label": "Bug severity" });
+  assert.equal(severity.props.value, "moderate");
+  assert.deepEqual(
+    severity.findAllByType("option").map((option) => [option.props.children, option.props.value]),
+    [
+      ["Critical", "critical"],
+      ["High", "high"],
+      ["Moderate", "moderate"],
+      ["Low", "low"],
+    ],
+  );
+  await act(async () => severity.props.onChange({ target: { value: "high" } }));
 
   const reportForm = renderer.root.findAll((node) => node.type === "form")[0];
   await act(async () => reportForm.props.onSubmit({ preventDefault: () => undefined }));
