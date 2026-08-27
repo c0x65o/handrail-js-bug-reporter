@@ -78,6 +78,14 @@ type UiVariables = CSSProperties & Record<`--handrail-bug-${string}`, string>;
 type DialogTab = "report" | "history";
 
 const RESPONSIVE_DIALOG_CSS = `
+[data-handrail-bug-reporter-dialog="true"] button {
+  appearance: none;
+  -webkit-appearance: none;
+}
+[data-handrail-bug-reporter-dialog="true"] :is(button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--handrail-bug-accent) !important;
+  outline-offset: 2px;
+}
 @media (max-width: 860px) {
   [data-handrail-bug-report-layout="true"] {
     grid-template-columns: minmax(0, 1fr) !important;
@@ -283,8 +291,8 @@ const styles: Record<string, CSSProperties> = {
   },
   tabs: {
     display: "flex",
-    gap: 8,
-    padding: 5,
+    gap: 4,
+    padding: 4,
     marginBottom: 16,
     border: "1px solid var(--handrail-bug-border)",
     borderRadius: 14,
@@ -292,20 +300,24 @@ const styles: Record<string, CSSProperties> = {
   },
   tab: {
     flex: 1,
+    appearance: "none",
+    WebkitAppearance: "none",
     border: "1px solid transparent",
     borderRadius: 10,
     padding: "8px 14px",
     cursor: "pointer",
-    color: "inherit",
+    color: "var(--handrail-bug-muted-text)",
     background: "transparent",
     font: "inherit",
     fontWeight: 700,
     minHeight: 38,
+    outlineOffset: 2,
   },
   activeTab: {
-    borderColor: "var(--handrail-bug-border)",
-    background: "var(--handrail-bug-surface)",
-    boxShadow: "0 3px 10px rgba(15, 23, 42, 0.08)",
+    borderColor: "color-mix(in srgb, var(--handrail-bug-accent) 24%, var(--handrail-bug-border))",
+    color: "var(--handrail-bug-accent)",
+    background: "color-mix(in srgb, var(--handrail-bug-accent) 9%, var(--handrail-bug-surface))",
+    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.06)",
   },
   label: {
     display: "grid",
@@ -389,6 +401,8 @@ const styles: Record<string, CSSProperties> = {
     cursor: "pointer",
   },
   button: {
+    appearance: "none",
+    WebkitAppearance: "none",
     border: "1px solid transparent",
     borderRadius: 10,
     padding: "8px 14px",
@@ -404,8 +418,39 @@ const styles: Record<string, CSSProperties> = {
   },
   secondaryButton: {
     borderColor: "var(--handrail-bug-border)",
-    background: "var(--handrail-bug-surface-muted)",
+    background: "var(--handrail-bug-surface)",
     color: "var(--handrail-bug-text)",
+  },
+  historyActionButton: {
+    appearance: "none",
+    WebkitAppearance: "none",
+    minHeight: 30,
+    padding: "5px 9px",
+    border: "1px solid var(--handrail-bug-border)",
+    borderRadius: 8,
+    color: "var(--handrail-bug-accent)",
+    background: "var(--handrail-bug-surface)",
+    cursor: "pointer",
+    font: "inherit",
+    fontSize: 12,
+    fontWeight: 700,
+    lineHeight: 1.2,
+    outlineOffset: 2,
+  },
+  clearClosedButton: {
+    appearance: "none",
+    WebkitAppearance: "none",
+    minHeight: 34,
+    padding: "6px 10px",
+    border: "1px solid color-mix(in srgb, var(--handrail-bug-danger-text) 24%, var(--handrail-bug-border))",
+    borderRadius: 9,
+    color: "var(--handrail-bug-danger-text)",
+    background: "var(--handrail-bug-danger-surface)",
+    cursor: "pointer",
+    font: "inherit",
+    fontSize: 12,
+    fontWeight: 700,
+    outlineOffset: 2,
   },
   status: { marginBottom: 14, borderRadius: 11, padding: "11px 14px", fontSize: 13 },
   historyControls: {
@@ -417,7 +462,7 @@ const styles: Record<string, CSSProperties> = {
   },
   historyItem: {
     display: "grid",
-    gridTemplateColumns: "minmax(240px, 2.2fr) minmax(90px, .7fr) minmax(100px, .8fr) minmax(110px, .8fr) minmax(120px, 1fr) minmax(130px, 1fr) 112px",
+    gridTemplateColumns: "minmax(240px, 2.2fr) minmax(90px, .7fr) minmax(100px, .8fr) minmax(110px, .8fr) minmax(120px, 1fr) minmax(130px, 1fr) 146px",
     alignItems: "center",
     gap: 12,
     padding: "12px 14px",
@@ -441,7 +486,7 @@ const styles: Record<string, CSSProperties> = {
   },
   historyListHeader: {
     display: "grid",
-    gridTemplateColumns: "minmax(240px, 2.2fr) minmax(90px, .7fr) minmax(100px, .8fr) minmax(110px, .8fr) minmax(120px, 1fr) minmax(130px, 1fr) 112px",
+    gridTemplateColumns: "minmax(240px, 2.2fr) minmax(90px, .7fr) minmax(100px, .8fr) minmax(110px, .8fr) minmax(120px, 1fr) minmax(130px, 1fr) 146px",
     gap: 12,
     padding: "9px 14px",
     color: "var(--handrail-bug-muted-text)",
@@ -655,14 +700,20 @@ function BugHistoryRow({
       <span style={{ padding: "4px 9px", border: "1px solid", borderRadius: 999, textAlign: "center", fontSize: 11, fontWeight: 800, ...statusBadgeStyle(group) }}>{bug.status_rollup.label}</span>
       <span title={bugDate(statusTimestamp)} style={{ color: "var(--handrail-bug-muted-text)", fontSize: 10 }}>{bugRelativeAge(statusTimestamp)}</span>
     </div>
-    <div role="cell" data-handrail-bug-history-cell="action" style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-      <button type="button" aria-expanded={expanded} aria-label={`View ${bug.title}`} onClick={() => onToggle(bug.id)} style={{ border: 0, padding: "6px 2px", color: "var(--handrail-bug-accent)", background: "transparent", cursor: "pointer", font: "inherit", fontSize: 12, fontWeight: 800 }}>View</button>
+    <div role="cell" data-handrail-bug-history-cell="action" style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
+      <button type="button" aria-expanded={expanded} aria-label={`View ${bug.title}`} onClick={() => onToggle(bug.id)} style={styles.historyActionButton}>View</button>
       <button
         type="button"
         disabled={busy}
         aria-label={`${bug.archived ? "Restore" : "Dismiss"} ${bug.title}`}
         onClick={() => void (bug.archived ? onRestore(bug.id) : onArchive(bug.id))}
-        style={{ border: 0, padding: "6px 2px", color: "var(--handrail-bug-accent)", background: "transparent", cursor: busy ? "wait" : "pointer", font: "inherit", fontSize: 12, fontWeight: 800 }}
+        style={{
+          ...styles.historyActionButton,
+          color: "var(--handrail-bug-muted-text)",
+          background: "var(--handrail-bug-surface-muted)",
+          cursor: busy ? "wait" : "pointer",
+          opacity: busy ? 0.65 : 1,
+        }}
       >
         {busy ? "Updating…" : bug.archived ? "Restore" : "Dismiss"}
       </button>
@@ -815,7 +866,7 @@ function BugHistory({ onClose }: { readonly onClose: () => void }): ReactElement
           }}
         >{option[0].toUpperCase() + option.slice(1)}</button>)}
       </div>
-      {visibility !== "archived" && (summary?.closed ?? 0) > 0 && <button type="button" disabled={busyBugId !== null} onClick={() => void clearClosed()} style={{ border: 0, padding: "8px 2px", color: "var(--handrail-bug-accent)", background: "transparent", cursor: busyBugId ? "wait" : "pointer", font: "inherit", fontWeight: 800 }}>
+      {visibility !== "archived" && (summary?.closed ?? 0) > 0 && <button type="button" disabled={busyBugId !== null} onClick={() => void clearClosed()} style={{ ...styles.clearClosedButton, cursor: busyBugId ? "wait" : "pointer", opacity: busyBugId ? 0.65 : 1 }}>
         {busyBugId === "__closed__" ? "Clearing…" : `Clear closed (${summary?.closed ?? 0})`}
       </button>}
     </div>
@@ -838,7 +889,11 @@ function BugHistory({ onClose }: { readonly onClose: () => void }): ReactElement
           placeholder="Search title, page, or version…"
           style={{ ...styles.input, flex: "1 1 320px", minWidth: 0, background: "var(--handrail-bug-surface)" }}
         />
-        <button type="button" aria-expanded={filtersVisible} onClick={() => setFiltersVisible((current) => !current)} style={{ ...buttonStyle("secondary"), flex: "0 0 auto" }}>Filters</button>
+        <button type="button" aria-expanded={filtersVisible} onClick={() => setFiltersVisible((current) => !current)} style={{
+          ...buttonStyle("secondary"),
+          flex: "0 0 auto",
+          ...(filtersVisible ? styles.activeTab : {}),
+        }}>Filters</button>
         <select
           aria-label="Bug sort order"
           value={sort}
