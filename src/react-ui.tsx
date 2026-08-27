@@ -299,7 +299,7 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     width: "min(1560px, calc(100vw - 24px))",
-    height: "min(960px, calc(100dvh - 16px))",
+    height: "auto",
     maxHeight: "calc(100vh - 16px)",
     boxSizing: "border-box",
     overflow: "hidden",
@@ -1245,12 +1245,11 @@ function BugReportForm({ onCancel }: { readonly onCancel: () => void }): ReactEl
             ["Current page", reporter.form.route || "Not provided"],
             ["App version", reporter.form.appVersion || "Not provided"],
             ["Environment", reporter.reporter.configuration.environment || "Not provided"],
-            ["Build", reporter.form.buildNumber || "Not provided"],
           ] as const).map(([label, value]) => <div key={label} style={{ display: "grid", gridTemplateColumns: "100px minmax(0, 1fr)", gap: 10, padding: "8px 12px", borderBottom: "1px solid var(--handrail-bug-border)", fontSize: 11 }}>
             <span style={{ color: "var(--handrail-bug-muted-text)" }}>{label}</span>
             <strong title={value} style={{ overflow: "hidden", textAlign: "right", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</strong>
           </div>)}
-          <p style={{ margin: 0, padding: "8px 12px", color: "var(--handrail-bug-muted-text)", background: "var(--handrail-bug-surface-muted)", fontSize: 10 }}>Only context shown here is included with this report.</p>
+          <p style={{ margin: 0, padding: "8px 12px", color: "var(--handrail-bug-muted-text)", background: "var(--handrail-bug-surface-muted)", fontSize: 10 }}>This context is included with this report.</p>
         </section>
 
         {reporter.policyStatus === "loading" && <div role="status" style={{ color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>Checking optional actions…</div>}

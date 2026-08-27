@@ -455,9 +455,9 @@ export function App() {
 The dialog delegates all policy, validation, submission, notification, and
 history operations to the same headless provider described below. Its compact,
 wide desktop layout presents the bug form beside an **Attached context** panel
-that reflects the route, app version, environment, and build values that will
-actually be submitted. Supply application-owned context through `initialForm`;
-the UI never claims or displays context it did not receive. It includes one
+that reflects the route, app version, and environment supplied by the
+application. Supply application-owned context through `initialForm`; the UI
+never claims or displays context it did not receive. It includes one
 validated PNG/JPEG screenshot by styled upload, direct
 clipboard paste, or drag and drop, an immediate thumbnail with Replace/Remove
 actions, policy-derived Ask controls,
@@ -493,10 +493,11 @@ the typed `--handrail-bug-*` properties directly; direct values take precedence
 over `appearance.tokens`. The built-in launcher installs the same configured
 tokens on itself, so its default primary treatment matches the dialog.
 
-The stable dialog uses most of the available viewport (up to 1560 × 960 px),
-keeps the same dimensions while switching between the report and history tabs,
-and scrolls its content within that fixed shell. The same values are installed
-as scoped `--handrail-bug-*` CSS variables on
+The report dialog sizes itself to its content on desktop and stays bounded by
+the available viewport, scrolling internally on shorter screens. The history
+view uses the available height (up to 960 px) for its tracker table. Mobile
+presentation remains full-screen. The configured appearance values are
+installed as scoped `--handrail-bug-*` CSS variables on
 the overlay. `appearance.className` targets the dialog and `appearance.style`
 targets the overlay for application-specific integration. The dialog has an
 accessible name and description, contains Tab focus, closes on Escape or an

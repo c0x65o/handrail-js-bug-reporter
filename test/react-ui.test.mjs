@@ -221,7 +221,8 @@ test("appearance tokens, dialog semantics, focus containment, Escape, and focus 
     assert.ok(dialog.props["aria-labelledby"]);
     assert.ok(dialog.props["aria-describedby"]);
     assert.equal(dialog.props.style.width, "min(1560px, calc(100vw - 24px))");
-    assert.equal(dialog.props.style.height, "min(960px, calc(100dvh - 16px))");
+    assert.equal(dialog.props.style.height, "auto");
+    assert.equal(dialog.props.style.maxHeight, "calc(100vh - 16px)");
     assert.equal(fakeDocument.activeElement, first);
 
     let prevented = false;
@@ -285,6 +286,7 @@ test("the packaged form delegates upload, paste, drop, thumbnail, policy, automa
   assert.match(JSON.stringify(renderer.toJSON()), /staging/);
   assert.match(JSON.stringify(renderer.toJSON()), /\/checkout/);
   assert.match(JSON.stringify(renderer.toJSON()), /1\.2\.3/);
+  assert.equal(renderer.root.findAllByProps({ children: "Build" }).length, 0);
 
   const inputs = renderer.root.findAll((node) => node.type === "input");
   const title = inputs.find((node) => node.props.placeholder === "What is broken?");
