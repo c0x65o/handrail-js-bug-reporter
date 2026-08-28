@@ -211,6 +211,16 @@ await reporter.submit({
 });
 ```
 
+#### Host CSP for screenshot previews
+
+The packaged React UI renders selected, pasted, and dropped local screenshots
+from browser `blob:` URLs. If the host application sends a Content Security
+Policy, allow those previews in `img-src`; a typical same-origin directive is
+`img-src 'self' data: blob:`. Add `blob:` only to `img-src`, not `script-src` or
+a broad `default-src`. Test with the production-equivalent policy and verify
+that the thumbnail actually decodes and renders—a filename or attachment card
+alone does not prove the preview loaded.
+
 Retries are opt-in through `retry.maxAttempts` (maximum 3). The SDK retries
 network failures and transient HTTP statuses, re-resolves the application
 session for every attempt, and reuses an intake `event_id` so a response-loss
@@ -478,6 +488,9 @@ After Handrail accepts a report, the form is replaced by a dedicated thank-you
 screen rather than leaving submitted fields editable. It confirms whether
 email updates were enabled, keeps notification failure separate from report
 success, and offers **Report another bug** and **Done** actions.
+Successful submission also marks any previously loaded **My bugs** query stale;
+opening the tab revalidates that query so the accepted report appears without a
+page refresh or unrelated filter change.
 
 `appearance.themeMode` accepts `auto`, `light`, or `dark`. `auto` is the
 default and follows the host color scheme while supplying a polished,
@@ -551,7 +564,8 @@ function BugReportForm() {
   // bugReport.replaceScreenshot / removeScreenshot / canAttachScreenshot
   // bugReport.submission / submit / resetSubmission
   // bugReport.tracking / refreshBugs({ search, statusGroup, sort, visibility })
-  // bugReport.loadMoreBugs / archiveBug / restoreBug / archiveClosedBugs
+  // bugReport.refreshCurrentBugs / loadMoreBugs
+  // bugReport.archiveBug / restoreBug / archiveClosedBugs
   return null;
 }
 
@@ -585,7 +599,11 @@ Bug history is also opt-in: call `refreshBugs` when the application opens its
 “My bugs” surface, then call `loadMoreBugs` while `tracking.hasMore` is true.
 Set `historyPageSize` on the provider to request a page size from 1 through 50.
 The tracking state exposes the server-normalized `summary` and `query` together
-with the current rows and continuation cursor.
+with the current rows and continuation cursor. `tracking.stale` becomes true
+after a successful submission or history mutation and remains true after a
+failed revalidation. Call `refreshCurrentBugs()` to preserve and revalidate the
+last server-normalized query. Archive and restore success is kept separate from
+a later refresh failure, which remains visible through tracking state.
 
 The host should provide its own loading, empty, error/retry, pending, success,
 and validation states. If the reporter is presented as a dialog, the host also

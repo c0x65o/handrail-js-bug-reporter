@@ -34,6 +34,7 @@ import {
   type HandrailBugReporterAppearance,
   type HandrailBugReporterStyle,
   type HandrailBugReporterButtonProps,
+  type HandrailBugReporterContextValue,
   type HandrailBugReporterDialogProps,
   type BugReporterFormState,
 } from "@handrail/bug-reporter/react";
@@ -67,6 +68,13 @@ void HandrailBugReporterProvider;
 void useHandrailBugReporter;
 void HandrailBugReporterButton;
 void HandrailBugReporterDialog;
+
+declare const headlessReporter: HandrailBugReporterContextValue;
+const trackingIsStale: boolean = headlessReporter.tracking.stale;
+const currentHistoryRefresh: Promise<BugTrackingPage> =
+  headlessReporter.refreshCurrentBugs();
+void trackingIsStale;
+void currentHistoryRefresh;
 
 const packagedAppearance: HandrailBugReporterAppearance = {
   themeMode: "auto",

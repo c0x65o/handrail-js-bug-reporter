@@ -562,3 +562,73 @@ test("My bugs uses the provider history, filters, and individual archive and res
   assert.ok(requests.some((request) => request.method === "DELETE"));
   await act(async () => renderer.unmount());
 });
+
+test("a submitted bug marks loaded tracking stale and refreshes it when My bugs opens", async () => {
+  const bugs = [trackedBug("bug-existing")];
+  const requests = [];
+  const fetch = async (url, init) => {
+    requests.push({ url: String(url), method: init.method });
+    if (init.method === "POST") {
+      bugs.unshift(trackedBug("bug-new"));
+      return jsonResponse({ bug_id: "bug-new" }, 201);
+    }
+    return jsonResponse({
+      contract_version: "v1",
+      bugs: [...bugs],
+      summary: {
+        total: bugs.length,
+        needs_attention: 0,
+        in_progress: bugs.length,
+        closed: 0,
+        not_reproduced: 0,
+      },
+      query: {
+        search: null,
+        status_group: null,
+        sort: "newest",
+        visibility: "active",
+      },
+      pagination: {
+        limit: 20,
+        filtered_count: bugs.length,
+        has_more: false,
+        next_cursor: null,
+      },
+    });
+  };
+
+  let renderer;
+  await act(async () => {
+    renderer = create(createElement(
+      HandrailBugReporterProvider,
+      { config: config(fetch), loadPolicyOnMount: false },
+      createElement(HandrailBugReporterDialog, { open: true, onClose: () => undefined }),
+    ));
+  });
+  await act(async () => {
+    renderer.root.findAllByProps({ role: "tab" })[1].props.onClick();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-history-row": "true" }).length, 1);
+
+  await act(async () => renderer.root.findAllByProps({ role: "tab" })[0].props.onClick());
+  await act(async () => {
+    renderer.root.findByProps({ placeholder: "What is broken?" }).props.onChange({
+      target: { value: "New bug" },
+    });
+    renderer.root.findByProps({
+      placeholder: "Describe what you expected and what happened instead. You can paste a screenshot here.",
+    }).props.onChange({ target: { value: "The new bug should appear in tracking." } });
+  });
+  await act(async () => renderer.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+  assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-submission-success": "true" }).length, 1);
+
+  await act(async () => {
+    renderer.root.findAllByProps({ role: "tab" })[1].props.onClick();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  assert.equal(requests.filter((request) => request.method === "GET").length, 2);
+  assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-history-row": "true" }).length, 2);
+  assert.equal(renderer.root.findAllByProps({ "aria-label": "View Bug bug-new" }).length, 1);
+  await act(async () => renderer.unmount());
+});
