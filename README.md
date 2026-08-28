@@ -225,6 +225,9 @@ Retries are opt-in through `retry.maxAttempts` (maximum 3). The SDK retries
 network failures and transient HTTP statuses, re-resolves the application
 session for every attempt, and reuses an intake `event_id` so a response-loss
 retry remains idempotent. Retry bodies never contain the application session.
+Trusted server adapters may provide `eventId` to retain that same idempotency
+boundary across an outer tool retry; browser forms should let the SDK generate
+it.
 The primary `BugReporterError.message` remains generic and never includes
 provider exceptions, response bodies, request data, tokens, or screenshots.
 For a rejected HTTP submission, callers may also use `statusCode`,

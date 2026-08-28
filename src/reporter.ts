@@ -108,6 +108,8 @@ export interface BugReportInput {
   readonly appFlavor?: string;
   readonly reproducer?: string;
   readonly stepsToReproduce?: string;
+  /** Stable identity for an exact trusted-server retry. The SDK generates one when omitted. */
+  readonly eventId?: string;
   readonly profileKey?: string;
   readonly metadata?: Readonly<Record<string, unknown>>;
   readonly screenshot?: ScreenshotAttachment;
@@ -1763,13 +1765,14 @@ export class HandrailBugReporterClient {
         allowedCallerFields[key] = callerFields[key];
       }
     }
+    const callerEventId = cleanString(input.eventId);
     const payload: Record<string, unknown> = {
       ...allowedCallerFields,
       title,
       description,
       project_id: this.projectId,
       environment: this.environment,
-      event_id: randomEventId(),
+      event_id: callerEventId ? callerEventId.slice(0, 160) : randomEventId(),
     };
     const profileKey = cleanString(input.profileKey);
     if (profileKey) payload.profile_key = profileKey;

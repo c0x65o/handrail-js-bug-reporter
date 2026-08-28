@@ -66,6 +66,22 @@ test("bug severity contract normalizes labels, canonical impact, and Handrail st
   assert.equal(normalizeBugImpact("unknown"), null);
 });
 
+test("trusted server callers may retain a stable event id across outer retries", async () => {
+  let submitted;
+  const reporter = createBugReporter(reporterConfig({
+    fetch: async (_url, init) => {
+      submitted = JSON.parse(init.body);
+      return jsonResponse({ bug_id: "bug-stable" }, 201);
+    },
+  }));
+  await reporter.submit({
+    title: "Stable retry",
+    description: "Use one canonical intake event.",
+    eventId: "assistant-conversation-1-turn-4",
+  });
+  assert.equal(submitted.event_id, "assistant-conversation-1-turn-4");
+});
+
 function trackedBug(overrides = {}) {
   return {
     id: "bug-123",
