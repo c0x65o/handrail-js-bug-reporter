@@ -186,6 +186,8 @@ export type BugReporterTrackingStatus =
 
 export interface BugReporterTrackingState {
   readonly status: BugReporterTrackingStatus;
+  /** True when a successful mutation means the current rows should be revalidated. */
+  readonly stale: boolean;
   readonly bugs: readonly TrackedBugRecord[];
   readonly hasMore: boolean;
   readonly nextCursor: string | null;
@@ -223,6 +225,8 @@ export interface HandrailBugReporterContextValue {
   refreshBugs(
     options?: BugReporterTrackingQueryOptions,
   ): Promise<BugTrackingPage>;
+  /** Revalidate the last server-normalized query, or the default query before first load. */
+  refreshCurrentBugs(): Promise<BugTrackingPage>;
   loadMoreBugs(): Promise<BugTrackingPage | null>;
   archiveBug(bugId: string): Promise<BugArchiveResult>;
   restoreBug(bugId: string): Promise<BugArchiveResult>;
@@ -246,6 +250,7 @@ const EMPTY_SUBMISSION: BugReporterSubmissionState = Object.freeze({
 
 const EMPTY_TRACKING: BugReporterTrackingState = Object.freeze({
   status: "idle",
+  stale: true,
   bugs: Object.freeze([]),
   hasMore: false,
   nextCursor: null,
@@ -455,6 +460,9 @@ export function HandrailBugReporterProvider({
           result,
           error: null,
         });
+        if (result.status === "submitted") {
+          setTracking((current) => ({ ...current, stale: true }));
+        }
         return result;
       } catch (error) {
         const safeError =
@@ -488,6 +496,7 @@ export function HandrailBugReporterProvider({
       if (generation === trackingGeneration.current) {
         setTracking({
           status: "ready",
+          stale: false,
           bugs: page.bugs,
           hasMore: page.pagination.has_more,
           nextCursor: page.pagination.next_cursor,
@@ -508,6 +517,7 @@ export function HandrailBugReporterProvider({
         setTracking((current) => ({
           ...current,
           status: "error",
+          stale: true,
           error: safeError,
         }));
       }
@@ -529,6 +539,7 @@ export function HandrailBugReporterProvider({
       if (generation === trackingGeneration.current) {
         setTracking((current) => ({
           status: "ready",
+          stale: false,
           bugs: [
             ...current.bugs,
             ...page.bugs.filter((bug) => (
@@ -554,6 +565,7 @@ export function HandrailBugReporterProvider({
         setTracking((current) => ({
           ...current,
           status: "error",
+          stale: true,
           error: safeError,
         }));
       }
@@ -561,7 +573,7 @@ export function HandrailBugReporterProvider({
     }
   }, [historyPageSize, reporter, tracking.hasMore, tracking.nextCursor, tracking.status]);
 
-  const refreshCurrentBugQuery = useCallback(async () => {
+  const refreshCurrentBugs = useCallback(async () => {
     const query = tracking.query;
     return refreshBugs(query ? {
       search: query.search || undefined,
@@ -573,21 +585,36 @@ export function HandrailBugReporterProvider({
 
   const archiveBug = useCallback(async (bugId: string) => {
     const result = await reporter.archiveBug(bugId);
-    await refreshCurrentBugQuery();
+    setTracking((current) => ({ ...current, stale: true }));
+    try {
+      await refreshCurrentBugs();
+    } catch {
+      // The archive succeeded. The tracking state separately exposes refresh failure.
+    }
     return result;
-  }, [refreshCurrentBugQuery, reporter]);
+  }, [refreshCurrentBugs, reporter]);
 
   const restoreBug = useCallback(async (bugId: string) => {
     const result = await reporter.restoreBug(bugId);
-    await refreshCurrentBugQuery();
+    setTracking((current) => ({ ...current, stale: true }));
+    try {
+      await refreshCurrentBugs();
+    } catch {
+      // The restore succeeded. The tracking state separately exposes refresh failure.
+    }
     return result;
-  }, [refreshCurrentBugQuery, reporter]);
+  }, [refreshCurrentBugs, reporter]);
 
   const archiveClosedBugs = useCallback(async () => {
     const result = await reporter.archiveClosedBugs();
-    await refreshCurrentBugQuery();
+    setTracking((current) => ({ ...current, stale: true }));
+    try {
+      await refreshCurrentBugs();
+    } catch {
+      // The archive succeeded. The tracking state separately exposes refresh failure.
+    }
     return result;
-  }, [refreshCurrentBugQuery, reporter]);
+  }, [refreshCurrentBugs, reporter]);
 
   const value = useMemo<HandrailBugReporterContextValue>(
     () => ({
@@ -609,6 +636,7 @@ export function HandrailBugReporterProvider({
       resetSubmission,
       tracking,
       refreshBugs,
+      refreshCurrentBugs,
       loadMoreBugs,
       archiveBug,
       restoreBug,
@@ -622,6 +650,7 @@ export function HandrailBugReporterProvider({
       policyStatus,
       refreshPolicy,
       refreshBugs,
+      refreshCurrentBugs,
       loadMoreBugs,
       removeScreenshot,
       replaceScreenshot,

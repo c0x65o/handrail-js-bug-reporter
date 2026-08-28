@@ -778,10 +778,16 @@ function BugHistoryRow({
 
 function BugHistory({ onClose }: { readonly onClose: () => void }): ReactElement {
   const reporter = useHandrailBugReporter();
-  const [search, setSearch] = useState("");
-  const [statusGroup, setStatusGroup] = useState<BugTrackingStatusGroup | "">("");
-  const [visibility, setVisibility] = useState<BugTrackingVisibility>("active");
-  const [sort, setSort] = useState<"newest" | "oldest">("newest");
+  const [search, setSearch] = useState(() => reporter.tracking.query?.search || "");
+  const [statusGroup, setStatusGroup] = useState<BugTrackingStatusGroup | "">(
+    () => reporter.tracking.query?.statusGroup || "",
+  );
+  const [visibility, setVisibility] = useState<BugTrackingVisibility>(
+    () => reporter.tracking.query?.visibility || "active",
+  );
+  const [sort, setSort] = useState<"newest" | "oldest">(
+    () => reporter.tracking.query?.sort || "newest",
+  );
   const [filtersVisible, setFiltersVisible] = useState(true);
   const [busyBugId, setBusyBugId] = useState<string | null>(null);
   const [expandedBugId, setExpandedBugId] = useState<string | null>(null);
@@ -1319,8 +1325,11 @@ export function HandrailBugReporterDialog({
 
   const selectTab = (next: DialogTab) => {
     setTab(next);
-    if (next === "history" && reporter.tracking.status === "idle") {
-      void reporter.refreshBugs().catch(() => undefined);
+    if (
+      next === "history"
+      && (tab !== "history" || reporter.tracking.stale)
+    ) {
+      void reporter.refreshCurrentBugs().catch(() => undefined);
     }
   };
 
