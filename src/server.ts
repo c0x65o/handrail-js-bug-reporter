@@ -165,6 +165,7 @@ export interface SameOriginBugReporterHandlerConfig<RequestType extends Request 
   readonly apiBaseUrl: string;
   readonly projectId: string;
   readonly environment: string;
+  /** Server-only service-scoped credential. Never expose it to browser code. */
   readonly reportToken: string;
   /** Same-origin mount path. Defaults to `/api/mobile-bug-reports`. */
   readonly routeBasePath?: string;

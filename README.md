@@ -40,7 +40,10 @@ const report = stampReport({
 ```
 
 It also provides policy discovery and JSON submission against Handrail's
-existing bug-report intake:
+existing bug-report intake. The direct browser configuration below is retained
+for already-deployed compatibility. New web integrations should use the
+server-only same-origin forwarding pattern documented below; mobile integrations
+continue to use their direct project/environment credential.
 
 ```ts
 import { createBugReporter } from "@handrail/bug-reporter";
@@ -49,7 +52,7 @@ const reporter = createBugReporter({
   apiBaseUrl: "https://dashboard.handrail-daas.com/api",
   projectId: "your-immutable-project-id",
   environment: "staging",
-  reportToken: "your-public-report-token",
+  reportToken: "your-legacy-direct-report-token",
   applicationSessionTokenProvider: async () =>
     applicationAuth.currentSession?.rawToken ?? null,
 });
@@ -273,6 +276,13 @@ export const handleBugReport = createSameOriginBugReporterHandler({
     (await authenticateHttpOnlyCookie(request))?.applicationSessionToken ?? null,
 });
 ```
+
+On Handrail-managed deployments, `HANDRAIL_BUG_REPORT_TOKEN` is a distinct
+server-only credential bound to this exact service environment. It must not be
+copied into browser configuration, client-prefixed environment variables,
+rendered HTML, logs, or API responses. The Automation UI does not ask the owner
+to select this service; Handrail provisions the binding from the deployed
+runtime.
 
 Adapt the framework's incoming request to a Web `Request` if necessary and
 return the handler's Web `Response`. The handler ignores inbound cookies,
