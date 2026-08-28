@@ -52,6 +52,7 @@ export {
 export type {
   AutomationOption,
   AutomationOptionKey,
+  BugAutomationMaxRisk,
   BugArchiveClosedResult,
   BugArchiveResult,
   BugReportInput,
@@ -62,6 +63,7 @@ export type {
   BugReporterErrorCode,
   BugReporterUpstreamError,
   BugReporterPolicy,
+  BugReporterAutomationPolicy,
   BugReportSubmissionResult,
   BugTrackingListOptions,
   BugTrackingPage,

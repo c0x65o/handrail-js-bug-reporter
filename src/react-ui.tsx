@@ -18,7 +18,6 @@ import {
 } from "./react";
 import {
   MAX_SCREENSHOT_BYTES,
-  type AutomationOptionKey,
   type BugTrackingStatusGroup,
   type BugTrackingVisibility,
   type ScreenshotAttachment,
@@ -1031,6 +1030,17 @@ function BugReportForm({ onCancel }: { readonly onCancel: () => void }): ReactEl
   const message = submissionMessage(reporter.submission);
   const notificationEligibility = reporter.policy?.reporterNotifications;
   const notificationsAvailable = notificationEligibility?.available === true;
+  const automationPolicy = reporter.policy?.automationPolicy;
+  const automationRole = reporter.policy?.role === "maintainer"
+    ? "Maintainer"
+    : reporter.policy?.role === "contributor"
+      ? "Contributor"
+      : "Requester";
+  const productionMaxRisk = automationPolicy
+    ?.productionMaxRiskByImpact[reporter.form.impact];
+  const riskLabel = (risk: string | undefined): string => risk === "none"
+    ? "disabled"
+    : risk ? `up to ${risk} risk` : "not available";
 
   useEffect(() => {
     if (!notificationsAvailable && reporter.form.notifyOnResolution) {
@@ -1287,14 +1297,16 @@ function BugReportForm({ onCancel }: { readonly onCancel: () => void }): ReactEl
           <p style={{ margin: 0, padding: "8px 12px", color: "var(--handrail-bug-muted-text)", background: "var(--handrail-bug-surface-muted)", fontSize: 10 }}>This context is included with this report.</p>
         </section>
 
-        {reporter.policyStatus === "loading" && <div role="status" style={{ color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>Checking optional actions…</div>}
-        {reporter.automationOptions.length > 0 && <fieldset style={{ ...styles.fieldset, margin: 0 }}>
-          <legend style={{ padding: "0 5px", fontWeight: 700 }}>Optional actions</legend>
-          {reporter.automationOptions.map((option) => <label key={option.key} style={styles.checkboxLabel}>
-            <input type="checkbox" checked={reporter.form.automationRequests.includes(option.key)} onChange={(event) => reporter.setAutomationRequest(option.key as AutomationOptionKey, event.target.checked)} />
-            <span><strong>{option.label}</strong></span>
-          </label>)}
-        </fieldset>}
+        {reporter.policyStatus === "loading" && <div role="status" style={{ color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>Loading automation policy…</div>}
+        {automationPolicy && <section data-handrail-bug-automation-policy="true" style={{ overflow: "hidden", border: "1px solid var(--handrail-bug-border)", borderRadius: 9, background: "var(--handrail-bug-surface)" }}>
+          <h3 style={{ margin: 0, padding: "9px 12px", borderBottom: "1px solid var(--handrail-bug-border)", fontSize: 12 }}>Automation policy</h3>
+          <div style={{ padding: "8px 12px", fontSize: 11 }}>
+            <strong>{automationRole}</strong>
+            <span style={{ display: "block", marginTop: 3, color: "var(--handrail-bug-muted-text)" }}>Automatic fix: {riskLabel(automationPolicy.automaticFixMaxRisk)}</span>
+            <span style={{ display: "block", marginTop: 2, color: "var(--handrail-bug-muted-text)" }}>Production for verified {reporter.form.impact} impact: {riskLabel(productionMaxRisk)}</span>
+          </div>
+          <p style={{ margin: 0, padding: "8px 12px", color: "var(--handrail-bug-muted-text)", background: "var(--handrail-bug-surface-muted)", fontSize: 10 }}>Deployment is decided by verified impact and change risk. This report cannot authorize deployment.</p>
+        </section>}
 
         {notificationsAvailable && <fieldset style={{ ...styles.fieldset, margin: 0 }}>
           <legend style={{ padding: "0 5px", fontWeight: 700 }}>Updates</legend>

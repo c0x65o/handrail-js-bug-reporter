@@ -30,24 +30,14 @@ export const BUG_TRACKING_VISIBILITIES = Object.freeze([
   "all",
 ] as const);
 
-export const AUTOMATION_OPTIONS = Object.freeze([
-  Object.freeze({ key: "auto_verify", label: "Verify this issue" }),
-  Object.freeze({
-    key: "repair_proposal",
-    label: "Prepare a repair proposal",
-  }),
-  Object.freeze({ key: "fix", label: "Fix this issue" }),
-  Object.freeze({
-    key: "deploy_staging",
-    label: "Fix and deploy to staging",
-  }),
-  Object.freeze({
-    key: "deploy_production",
-    label: "Fix and deploy to production",
-  }),
-] as const);
-
-export type AutomationOptionKey = (typeof AUTOMATION_OPTIONS)[number]["key"];
+/** @deprecated Bug reporters no longer select automation or deployment. */
+export type AutomationOptionKey =
+  | "auto_verify"
+  | "repair_proposal"
+  | "fix"
+  | "deploy_staging"
+  | "deploy_production";
+export const AUTOMATION_OPTIONS: readonly AutomationOption[] = Object.freeze([]);
 export type ReporterAccessLevel = "default" | "user" | "full_access";
 export type KnownUserAutomationRole = "requester" | "contributor" | "maintainer";
 export type JsonPrimitive = string | number | boolean | null;
@@ -68,6 +58,16 @@ export interface AutomationOption {
   readonly label: string;
 }
 
+export type BugAutomationMaxRisk = "none" | "low" | "moderate" | "high";
+
+export interface BugReporterAutomationPolicy {
+  readonly schemaVersion: 3;
+  readonly automaticFixMaxRisk: BugAutomationMaxRisk;
+  readonly productionMaxRiskByImpact: Readonly<
+    Record<BugImpact, BugAutomationMaxRisk>
+  >;
+}
+
 export interface BugReporterPolicy {
   readonly schemaVersion: 1;
   readonly projectId: string;
@@ -77,6 +77,7 @@ export interface BugReporterPolicy {
   /** Canonical shared role on newer servers; accessLevel remains for compatibility. */
   readonly role?: KnownUserAutomationRole | null;
   readonly askOptions: readonly AutomationOption[];
+  readonly automationPolicy?: BugReporterAutomationPolicy;
   /** Present when the policy endpoint advertises verified-user notification eligibility. */
   readonly reporterNotifications?: ReporterNotificationEligibility;
 }
@@ -198,6 +199,7 @@ export interface BugReporterConfigurationSnapshot {
 }
 
 export interface SubmissionOptions {
+  /** @deprecated Automation and deployment are selected only by project policy. */
   readonly automationRequests?: readonly AutomationOptionKey[];
   readonly signal?: AbortSignal;
 }
@@ -1796,18 +1798,8 @@ export class HandrailBugReporterClient {
   private allowedAutomationRequests(
     requested: readonly AutomationOptionKey[] | undefined,
   ): Readonly<Record<string, true>> | null {
-    if (!this.#policy || !requested?.length) return null;
-    const available = new Set(
-      this.#policy.askOptions.map((option) => option.key),
-    );
-    const selected = new Set(requested);
-    const output: Record<string, true> = {};
-    for (const option of AUTOMATION_OPTIONS) {
-      if (available.has(option.key) && selected.has(option.key)) {
-        output[option.key] = true;
-      }
-    }
-    return Object.keys(output).length ? Object.freeze(output) : null;
+    void requested;
+    return null;
   }
 
   private parsePolicy(input: unknown): BugReporterPolicy | null {
@@ -1851,6 +1843,39 @@ export class HandrailBugReporterClient {
     const askOptions = Object.freeze(
       AUTOMATION_OPTIONS.filter((option) => optionKeys.has(option.key)),
     );
+    const automationPolicyRecord = plainRecord(body.automation_policy);
+    const automaticFixMaxRisk = cleanString(
+      automationPolicyRecord?.automatic_fix_max_risk,
+    ) as BugAutomationMaxRisk | null;
+    const productionRiskRecord = plainRecord(
+      automationPolicyRecord?.production_max_risk_by_impact,
+    );
+    const maxRisks = new Set<BugAutomationMaxRisk>([
+      "none",
+      "low",
+      "moderate",
+      "high",
+    ]);
+    const impactRisks = Object.fromEntries(
+      (["critical", "high", "moderate", "low"] as const).map((impact) => [
+        impact,
+        cleanString(productionRiskRecord?.[impact]),
+      ]),
+    ) as Record<BugImpact, string | null>;
+    const automationPolicy = automationPolicyRecord?.schema_version === 3
+      && automaticFixMaxRisk
+      && maxRisks.has(automaticFixMaxRisk)
+      && Object.values(impactRisks).every((risk) => (
+        risk != null && maxRisks.has(risk as BugAutomationMaxRisk)
+      ))
+      ? Object.freeze({
+          schemaVersion: 3 as const,
+          automaticFixMaxRisk,
+          productionMaxRiskByImpact: Object.freeze(
+            impactRisks as Record<BugImpact, BugAutomationMaxRisk>,
+          ),
+        })
+      : undefined;
     const notificationRecord = plainRecord(body.reporter_notifications);
     const notificationAvailable = notificationRecord?.available === true;
     const recipientHint = notificationAvailable
@@ -1869,6 +1894,7 @@ export class HandrailBugReporterClient {
       accessLevel,
       role,
       askOptions,
+      automationPolicy,
       reporterNotifications: Object.freeze({
         available: notificationAvailable,
         recipientHint,
