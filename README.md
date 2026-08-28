@@ -517,8 +517,10 @@ over `appearance.tokens`. The built-in launcher installs the same configured
 tokens on itself, so its default primary treatment matches the dialog.
 
 The report and history tabs share one compact desktop dialog height so the
-shell does not resize when users switch views. The dialog stays bounded by the
-available viewport, and long forms or tracker tables scroll internally. Mobile
+shell does not resize when users switch views. The description, reproduction,
+and screenshot areas expand to use the available desktop form height. The
+dialog stays bounded by the available viewport, and long forms or tracker
+tables scroll internally. Mobile
 presentation remains full-screen. The configured appearance values are
 installed as scoped `--handrail-bug-*` CSS variables on
 the overlay. `appearance.className` targets the dialog and `appearance.style`

@@ -118,6 +118,7 @@ test("the packaged UI is opt-in and the launcher mounts a separate dialog", asyn
   const dialogCss = renderer.root.findByType("style").children.join("");
   assert.match(dialogCss, /button \{\s+appearance: none;/u);
   assert.match(dialogCss, /:focus-visible \{\s+outline: 2px solid var\(--handrail-bug-accent\) !important;/u);
+  assert.match(dialogCss, /data-handrail-bug-report-form/u);
   const [reportTab, historyTab] = renderer.root.findAllByProps({ role: "tab" });
   assert.equal(reportTab.props.style.WebkitAppearance, "none");
   assert.equal(reportTab.props.style.color, "var(--handrail-bug-accent-text)");
@@ -282,6 +283,10 @@ test("the packaged form delegates upload, paste, drop, thumbnail, policy, automa
   assert.match(JSON.stringify(renderer.toJSON()), /j\*\*\*@example\.com/);
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-report-layout": "true" }).length, 1);
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-context": "true" }).length, 1);
+  assert.equal(renderer.root.findByProps({ "data-handrail-bug-report-panel": "true" }).props.style.display, "flex");
+  assert.equal(renderer.root.findByProps({ "data-handrail-bug-report-form": "true" }).props.style.flex, "1 1 auto");
+  assert.equal(renderer.root.findByProps({ "data-handrail-bug-report-layout": "true" }).props.style.flex, "1 1 auto");
+  assert.match(renderer.root.findByProps({ "data-handrail-bug-report-details": "true" }).props.style.gridTemplateRows, /minmax\(126px, 1\.35fr\)/u);
   assert.match(JSON.stringify(renderer.toJSON()), /Attached context/);
   assert.match(JSON.stringify(renderer.toJSON()), /staging/);
   assert.match(JSON.stringify(renderer.toJSON()), /\/checkout/);
@@ -292,6 +297,9 @@ test("the packaged form delegates upload, paste, drop, thumbnail, policy, automa
   const title = inputs.find((node) => node.props.placeholder === "What is broken?");
   const details = renderer.root.findByProps({ placeholder: "Describe what you expected and what happened instead. You can paste a screenshot here." });
   const reproducer = renderer.root.findByProps({ placeholder: "1. Open…  2. Click…  3. See…" });
+  assert.equal(details.props.style.height, "100%");
+  assert.equal(reproducer.props.style.height, "100%");
+  assert.equal(renderer.root.findByProps({ "aria-label": "Add or paste a screenshot" }).props.style.minHeight, 104);
   await act(async () => {
     title.props.onChange({ target: { value: "Checkout is blocked" } });
     details.props.onChange({ target: { value: "Continue does not respond." } });
@@ -311,6 +319,8 @@ test("the packaged form delegates upload, paste, drop, thumbnail, policy, automa
   await act(async () => invalidFileInput.props.onChange({ target: { files: [png], value: "checkout.png" } }));
   assert.equal(renderer.root.findAllByProps({ children: "checkout.png" }).length, 1);
   assert.equal(renderer.root.findAllByProps({ alt: "Bug report screenshot preview" }).length, 1);
+  assert.equal(renderer.root.findByProps({ alt: "Bug report screenshot preview" }).props.style.width, 144);
+  assert.equal(renderer.root.findByProps({ alt: "Bug report screenshot preview" }).props.style.height, 90);
   assert.equal(renderer.root.findAllByProps({ children: "Replace" }).length, 1);
   assert.equal(renderer.root.findAllByProps({ children: "Remove" }).length, 1);
 

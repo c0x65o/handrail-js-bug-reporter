@@ -119,8 +119,23 @@ const RESPONSIVE_DIALOG_CSS = `
   outline-offset: 2px;
 }
 @media (max-width: 860px) {
+  [data-handrail-bug-report-panel="true"],
+  [data-handrail-bug-report-form="true"] {
+    display: block !important;
+    flex: none !important;
+    min-height: auto !important;
+  }
   [data-handrail-bug-report-layout="true"] {
+    flex: none !important;
+    min-height: auto !important;
     grid-template-columns: minmax(0, 1fr) !important;
+  }
+  [data-handrail-bug-report-details="true"] {
+    display: block !important;
+    min-height: auto !important;
+  }
+  [data-handrail-bug-expanding-field="true"] textarea {
+    height: auto !important;
   }
   [data-handrail-bug-context="true"] {
     order: -1;
@@ -402,7 +417,7 @@ const styles: Record<string, CSSProperties> = {
   screenshotDropzone: {
     display: "grid",
     placeItems: "center",
-    minHeight: 58,
+    minHeight: 104,
     padding: 10,
     border: "1px dashed var(--handrail-bug-border)",
     borderRadius: 10,
@@ -411,6 +426,7 @@ const styles: Record<string, CSSProperties> = {
   },
   screenshotPreview: {
     display: "flex",
+    flex: 1,
     alignItems: "center",
     gap: 10,
     flexWrap: "wrap",
@@ -420,9 +436,9 @@ const styles: Record<string, CSSProperties> = {
     background: "var(--handrail-bug-surface)",
   },
   screenshotThumbnail: {
-    width: 108,
-    height: 68,
-    flex: "0 0 108px",
+    width: 144,
+    height: 90,
+    flex: "0 0 144px",
     border: "1px solid var(--handrail-bug-border)",
     borderRadius: 8,
     objectFit: "cover",
@@ -1174,12 +1190,27 @@ function BugReportForm({ onCancel }: { readonly onCancel: () => void }): ReactEl
     </section>;
   }
 
-  return <form onSubmit={(event) => void onSubmit(event)} onPaste={onPaste} style={{ width: "100%" }}>
+  return <form
+    data-handrail-bug-report-form="true"
+    onSubmit={(event) => void onSubmit(event)}
+    onPaste={onPaste}
+    style={{ display: "flex", width: "100%", minHeight: 0, flex: "1 1 auto", flexDirection: "column" }}
+  >
     {localError && <div role="alert" style={{ ...styles.status, background: "var(--handrail-bug-danger-surface)", color: "var(--handrail-bug-danger-text)" }}>{localError}</div>}
     {message && <div role={message.role} aria-live="polite" style={{ ...styles.status, ...message.style }}>{message.text}</div>}
 
-    <div data-handrail-bug-report-layout="true" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.8fr) minmax(280px, .72fr)", gap: 16, alignItems: "start" }}>
-      <section aria-label="Bug details">
+    <div data-handrail-bug-report-layout="true" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.8fr) minmax(280px, .72fr)", gap: 16, minHeight: 0, flex: "1 1 auto", alignItems: "stretch" }}>
+      <section
+        data-handrail-bug-report-details="true"
+        aria-label="Bug details"
+        style={{
+          display: "grid",
+          gridTemplateRows: reporter.canAttachScreenshot
+            ? "auto minmax(126px, 1.35fr) minmax(92px, .85fr) minmax(104px, .8fr)"
+            : "auto minmax(150px, 1.5fr) minmax(110px, 1fr)",
+          minHeight: 0,
+        }}
+      >
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(150px, .3fr)", gap: 12 }}>
           <label style={styles.label}>
             Brief summary
@@ -1192,13 +1223,13 @@ function BugReportForm({ onCancel }: { readonly onCancel: () => void }): ReactEl
             </select>
           </label>
         </div>
-        <label style={styles.label}>
+        <label data-handrail-bug-expanding-field="true" style={{ ...styles.label, gridTemplateRows: "auto minmax(0, 1fr)", minHeight: 0 }}>
           What happened?
-          <textarea required maxLength={20_000} value={reporter.form.description} onChange={(event) => reporter.updateForm({ description: event.target.value })} placeholder="Describe what you expected and what happened instead. You can paste a screenshot here." style={{ ...styles.input, minHeight: 96, resize: "vertical" }} />
+          <textarea required maxLength={20_000} value={reporter.form.description} onChange={(event) => reporter.updateForm({ description: event.target.value })} placeholder="Describe what you expected and what happened instead. You can paste a screenshot here." style={{ ...styles.input, height: "100%", minHeight: 96, resize: "vertical" }} />
         </label>
-        <label style={styles.label}>
+        <label data-handrail-bug-expanding-field="true" style={{ ...styles.label, gridTemplateRows: "auto minmax(0, 1fr)", minHeight: 0 }}>
           <span>Steps to reproduce <span style={{ marginLeft: 6, color: "var(--handrail-bug-muted-text)", fontSize: 11, fontWeight: 500 }}>Optional</span></span>
-          <textarea maxLength={20_000} value={reporter.form.reproducer || ""} onChange={(event) => reporter.updateForm({ reproducer: event.target.value || undefined })} placeholder="1. Open…  2. Click…  3. See…" style={{ ...styles.input, minHeight: 64, resize: "vertical" }} />
+          <textarea maxLength={20_000} value={reporter.form.reproducer || ""} onChange={(event) => reporter.updateForm({ reproducer: event.target.value || undefined })} placeholder="1. Open…  2. Click…  3. See…" style={{ ...styles.input, height: "100%", minHeight: 64, resize: "vertical" }} />
         </label>
 
         {reporter.canAttachScreenshot && <div
@@ -1207,6 +1238,7 @@ function BugReportForm({ onCancel }: { readonly onCancel: () => void }): ReactEl
       onDragOver={onScreenshotDragOver}
       onDragLeave={() => setDragActive(false)}
       onDrop={onScreenshotDrop}
+      style={{ display: "flex", minHeight: 104 }}
     >
       <input
         ref={fileInputRef}
@@ -1241,7 +1273,7 @@ function BugReportForm({ onCancel }: { readonly onCancel: () => void }): ReactEl
         </div>}
       </section>
 
-      <aside data-handrail-bug-context="true" aria-label="Attached context and options" style={{ display: "grid", gap: 10 }}>
+      <aside data-handrail-bug-context="true" aria-label="Attached context and options" style={{ display: "grid", alignSelf: "start", gap: 10 }}>
         <section style={{ overflow: "hidden", border: "1px solid var(--handrail-bug-border)", borderRadius: 9, background: "var(--handrail-bug-surface)" }}>
           <h3 style={{ margin: 0, padding: "9px 12px", borderBottom: "1px solid var(--handrail-bug-border)", fontSize: 12 }}>Attached context</h3>
           {([
@@ -1418,7 +1450,7 @@ export function HandrailBugReporterDialog({
           </button>
         </div>}
         {tab === "report"
-          ? <div id={reportPanelId} role={showHistory ? "tabpanel" : undefined} aria-labelledby={showHistory ? reportTabId : undefined} style={{ flex: "1 0 auto" }}><BugReportForm onCancel={closeDialog} /></div>
+          ? <div id={reportPanelId} role={showHistory ? "tabpanel" : undefined} aria-labelledby={showHistory ? reportTabId : undefined} data-handrail-bug-report-panel="true" style={{ display: "flex", minHeight: 0, flex: "1 1 auto", flexDirection: "column" }}><BugReportForm onCancel={closeDialog} /></div>
           : <div id={historyPanelId} role="tabpanel" aria-labelledby={historyTabId} style={{ display: "flex", width: "100%", minHeight: 0, flex: "1 1 auto" }}><BugHistory onClose={closeDialog} /></div>}
       </div>
     </section>
