@@ -221,7 +221,7 @@ test("appearance tokens, dialog semantics, focus containment, Escape, and focus 
     assert.ok(dialog.props["aria-labelledby"]);
     assert.ok(dialog.props["aria-describedby"]);
     assert.equal(dialog.props.style.width, "min(1560px, calc(100vw - 24px))");
-    assert.equal(dialog.props.style.height, "auto");
+    assert.equal(dialog.props.style.height, "min(720px, calc(100dvh - 16px))");
     assert.equal(dialog.props.style.maxHeight, "calc(100vh - 16px)");
     assert.equal(fakeDocument.activeElement, first);
 
@@ -521,7 +521,7 @@ test("My bugs uses the provider history, filters, and individual archive and res
   assert.equal(renderer.root.findAllByType("article").length, 2);
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-history": "true" }).length, 1);
   assert.equal(renderer.root.findByProps({ "aria-label": "Filter bugs by status" }).props.role, "group");
-  assert.equal(renderer.root.findByProps({ role: "dialog" }).props.style.height, "min(960px, calc(100dvh - 16px))");
+  assert.equal(renderer.root.findByProps({ role: "dialog" }).props.style.height, "min(720px, calc(100dvh - 16px))");
   assert.equal(renderer.root.findByProps({ role: "table" }).props["aria-label"], "Reported bugs");
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-history-row": "true" }).length, 2);
   assert.ok(renderer.root.findAllByType("span").some((node) => (

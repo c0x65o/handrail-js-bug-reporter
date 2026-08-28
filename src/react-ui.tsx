@@ -299,7 +299,7 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     width: "min(1560px, calc(100vw - 24px))",
-    height: "auto",
+    height: "min(720px, calc(100dvh - 16px))",
     maxHeight: "calc(100vh - 16px)",
     boxSizing: "border-box",
     overflow: "hidden",
@@ -312,9 +312,6 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 13,
     lineHeight: 1.4,
     isolation: "isolate",
-  },
-  historyDialog: {
-    height: "min(960px, calc(100dvh - 16px))",
   },
   header: {
     display: "flex",
@@ -1392,7 +1389,7 @@ export function HandrailBugReporterDialog({
       aria-labelledby={headingId}
       aria-describedby={descriptionId}
       tabIndex={-1}
-      style={{ ...styles.dialog, ...(tab === "history" ? styles.historyDialog : {}) }}
+      style={styles.dialog}
       onKeyDown={onDialogKeyDown}
     >
       <header data-handrail-bug-reporter-header="true" style={styles.header}>
