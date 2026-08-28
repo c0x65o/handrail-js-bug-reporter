@@ -541,6 +541,10 @@ test("My bugs uses the provider history, filters, and individual archive and res
   assert.equal(renderer.root.findByProps({ "aria-label": "Filter bugs by status" }).props.role, "group");
   assert.equal(renderer.root.findByProps({ role: "dialog" }).props.style.height, "min(720px, calc(100dvh - 16px))");
   assert.equal(renderer.root.findByProps({ role: "table" }).props["aria-label"], "Reported bugs");
+  const historyHeaders = renderer.root.findAllByProps({ role: "columnheader" }).map((node) => node.children.join(""));
+  assert.ok(historyHeaders.includes("Submitted"));
+  assert.ok(historyHeaders.includes("App version"));
+  assert.equal(historyHeaders.includes("Date"), false);
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-history-row": "true" }).length, 2);
   assert.ok(renderer.root.findAllByType("span").some((node) => (
     /^Updated .+ ago$/u.test(node.children.join(""))
@@ -563,6 +567,12 @@ test("My bugs uses the provider history, filters, and individual archive and res
   assert.equal(renderer.root.findAllByProps({ children: "Clear closed (1)" }).length, 0);
   await act(async () => viewButton.props.onClick());
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-history-detail": "true" }).length, 1);
+  const detailLabels = renderer.root.findByProps({ "data-handrail-bug-history-detail": "true" })
+    .findAllByType("strong").map((node) => node.children.join(""));
+  assert.ok(detailLabels.includes("Bug ID"));
+  assert.ok(detailLabels.includes("Submitted"));
+  assert.ok(detailLabels.includes("App version"));
+  assert.equal(detailLabels.includes("Environment"), false);
   assert.deepEqual(renderer.root.findByProps({ "aria-label": "Bug history visibility" }).findAllByType("button").map((button) => button.children.join("")), ["Active", "Archived"]);
 
   await act(async () => renderer.root.findByProps({ "aria-label": "Archive Bug bug-1" }).props.onClick());

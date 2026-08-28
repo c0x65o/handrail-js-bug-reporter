@@ -481,6 +481,10 @@ actions, policy-derived Ask controls,
 an unchecked report-scoped update consent control when the verified user is
 eligible, and an owned **My bugs** view with search, status/visibility/sort
 filters, keyset pagination, and individual archive and restore actions.
+The history list labels the user’s exact submitted date and time and submitted
+app version. Expanded details retain the Bug ID for support, omit the internal
+deployment environment, and show exact fixed and deployed times when Handrail
+has that evidence.
 After Handrail accepts a report, the form is replaced by a dedicated thank-you
 screen rather than leaving submitted fields editable. It confirms whether
 email updates were enabled, keeps notification failure separate from report

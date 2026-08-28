@@ -651,7 +651,7 @@ function bugDate(value: string | null): string {
   const date = new Date(value);
   return Number.isNaN(date.valueOf())
     ? "Date unavailable"
-    : new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date);
+    : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
 function bugRelativeAge(value: string | null): string {
@@ -784,9 +784,12 @@ function BugHistoryRow({
     </div>
     {expanded && <div role="cell" data-handrail-bug-history-detail="true" style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, padding: "10px 12px", border: "1px solid var(--handrail-bug-border)", borderRadius: 9, color: "var(--handrail-bug-muted-text)", background: "var(--handrail-bug-surface-muted)", fontSize: 11 }}>
       <span><strong style={{ display: "block", color: "var(--handrail-bug-text)" }}>Bug ID</strong>{bug.id}</span>
-      <span><strong style={{ display: "block", color: "var(--handrail-bug-text)" }}>Environment</strong>{bug.environment}</span>
+      <span><strong style={{ display: "block", color: "var(--handrail-bug-text)" }}>Submitted</strong>{bugDate(bug.last_reported_at)}</span>
+      <span><strong style={{ display: "block", color: "var(--handrail-bug-text)" }}>App version</strong>{bug.reported_app_version ? `v${bug.reported_app_version.replace(/^v/iu, "")}` : "Not provided"}</span>
       <span><strong style={{ display: "block", color: "var(--handrail-bug-text)" }}>Reported page</strong>{bug.reported_route || "Not provided"}</span>
       <span><strong style={{ display: "block", color: "var(--handrail-bug-text)" }}>Occurrences</strong>{bug.occurrence_count}</span>
+      {bug.fixed_at && <span><strong style={{ display: "block", color: "var(--handrail-bug-text)" }}>Fixed</strong>{bugDate(bug.fixed_at)}</span>}
+      {bug.status_rollup.stage === "deployed" && statusTimestamp && <span><strong style={{ display: "block", color: "var(--handrail-bug-text)" }}>Deployed</strong>{bugDate(statusTimestamp)}</span>}
     </div>}
   </article>;
 }
@@ -992,7 +995,7 @@ function BugHistory({ onClose }: { readonly onClose: () => void }): ReactElement
     {reporter.tracking.status === "error" && !historyActionError && <div role="alert" style={{ ...styles.status, background: "var(--handrail-bug-danger-surface)", color: "var(--handrail-bug-danger-text)" }}>{reporter.tracking.error?.message || "Bug history could not be loaded."}</div>}
     {showHistoryResults && <div role="table" aria-label="Reported bugs" data-handrail-bug-history-list="true" style={{ ...styles.historyList, flex: "1 1 auto", opacity: reporter.tracking.status === "loading" ? 0.68 : 1 }}>
       <div role="row" data-handrail-bug-history-header="true" style={styles.historyListHeader}>
-        <span role="columnheader">Issue</span><span role="columnheader">Severity</span><span role="columnheader">Date</span><span role="columnheader">App version</span><span role="columnheader">Page / path</span><span role="columnheader">Status</span><span role="columnheader">Action</span>
+        <span role="columnheader">Issue</span><span role="columnheader">Severity</span><span role="columnheader">Submitted</span><span role="columnheader">App version</span><span role="columnheader">Page / path</span><span role="columnheader">Status</span><span role="columnheader">Action</span>
       </div>
       {reporter.tracking.bugs.length === 0
         ? <div role="status" style={{ display: "grid", placeItems: "center", minHeight: 180, padding: 24, color: "var(--handrail-bug-muted-text)", textAlign: "center" }}>
