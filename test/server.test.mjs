@@ -68,7 +68,7 @@ test("request-scoped reporters resolve fresh identity without cross-request leak
     ["request-one-policy", "request-one-submit", "request-two-submit"],
   );
   assert.equal(JSON.parse(requests[1].body).reporter_sdk_runtime, "node");
-  assert.equal(JSON.parse(requests[1].body).automation_requests.fix, true);
+  assert.equal(JSON.parse(requests[1].body).automation_requests, undefined);
   assert.doesNotMatch(
     requests.filter((request) => request.body).map((request) => request.body).join("\n"),
     /request-one|request-two/,
@@ -186,7 +186,7 @@ test("same-origin forwarding keeps HttpOnly cookies and server secrets out of br
     "Bearer server-report-secret",
   );
   const forwardedBody = JSON.parse(upstreamRequests[1].init.body);
-  assert.equal(forwardedBody.automation_requests.fix, true);
+  assert.equal(forwardedBody.automation_requests, undefined);
   assert.deepEqual(forwardedBody.reporter_notification, {
     notify_on_resolution: true,
     consent_version: "v1",

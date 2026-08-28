@@ -24,7 +24,17 @@ const reporterPolicy = {
   project_id: "project-123",
   environment: "staging",
   reporter: { identity_verified: true, access_level: "full_access" },
-  ask_options: [{ key: "fix", label: "Fix" }],
+  ask_options: [],
+  automation_policy: {
+    schema_version: 3,
+    automatic_fix_max_risk: "high",
+    production_max_risk_by_impact: {
+      critical: "moderate",
+      high: "low",
+      moderate: "none",
+      low: "none",
+    },
+  },
   reporter_notifications: {
     available: true,
     recipient_hint: "j***@example.com",
@@ -359,9 +369,7 @@ test("the packaged form delegates upload, paste, drop, thumbnail, policy, automa
   assert.equal(renderer.root.findAllByProps({ children: "dropped.png" }).length, 1);
   assert.equal(renderer.root.findAllByProps({ children: "clipboard.png" }).length, 0);
 
-  const checkboxes = renderer.root.findAll((node) => node.type === "input" && node.props.type === "checkbox");
-  const automation = checkboxes.find((node) => node.props["aria-label"] === undefined);
-  await act(async () => automation.props.onChange({ target: { checked: true } }));
+  assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-automation-policy": "true" }).length, 1);
   await act(async () => renderer.root.findByProps({ "aria-label": "Email me when this bug is fixed" }).props.onChange({ target: { checked: true } }));
   assert.equal(renderer.root.findByProps({ "aria-label": "Email me when this bug is fixed" }).props.checked, true);
   const severity = renderer.root.findByProps({ "aria-label": "Bug severity" });
@@ -387,7 +395,7 @@ test("the packaged form delegates upload, paste, drop, thumbnail, policy, automa
   assert.equal(submitted.reproducer, "1. Open checkout. 2. Click Continue.");
   assert.equal(submitted.screenshot_mime_type, "image/png");
   assert.equal(submitted.severity, "high");
-  assert.deepEqual(submitted.automation_requests, { fix: true });
+  assert.equal(submitted.automation_requests, undefined);
   assert.deepEqual(submitted.reporter_notification, {
     notify_on_resolution: true,
     consent_version: "v1",

@@ -27,11 +27,17 @@ const validPolicy = {
     recipient_hint: "r***@example.com",
     lifecycles: ["fixed"],
   },
-  ask_options: [
-    { key: "auto_verify", label: "Server-controlled label" },
-    { key: "fix", label: "Fix this issue" },
-    { key: "future_unsafe_option", label: "Do everything" },
-  ],
+  ask_options: [],
+  automation_policy: {
+    schema_version: 3,
+    automatic_fix_max_risk: "high",
+    production_max_risk_by_impact: {
+      critical: "moderate",
+      high: "low",
+      moderate: "none",
+      low: "none",
+    },
+  },
 };
 
 function jsonResponse(body, status = 200) {
@@ -420,7 +426,7 @@ test("submission retries idempotently with fresh session headers and filtered au
   );
   const firstBody = JSON.parse(submissions[0].init.body);
   const secondBody = JSON.parse(submissions[1].init.body);
-  assert.deepEqual(firstBody.automation_requests, { fix: true });
+  assert.equal(firstBody.automation_requests, undefined);
   assert.equal(secondBody.event_id, firstBody.event_id);
   assert.match(firstBody.event_id, /^js-/);
   assert.equal(firstBody.project_id, "project-123");

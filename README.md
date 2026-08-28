@@ -158,15 +158,11 @@ or throws, ordinary bug reporting continues without verified attribution.
 
 Policy discovery is best effort and never downloads Known Users. The SDK
 accepts only a version-1 response for the configured project and environment
-whose reporter identity is server-verified. It ignores unknown automation
-keys and uses this fixed allowlist:
-
-- `deploy_staging`
-- `deploy_production`
-
-Verification and repair proposals are automatic. The server advertises only
-the staging and production controls allowed for the reporter's access tier.
-Older policy keys remain accepted for compatibility with in-flight responses.
+whose reporter identity is server-verified. The packaged UI shows the captured
+Requester, Contributor, or Maintainer policy as read-only context: the maximum
+automatic fix risk and the production risk threshold for the selected impact.
+Bug reporters never receive staging or production controls. Deployment is
+decided by Handrail after impact and change risk are verified.
 
 Policy discovery falls back to vanilla reporting after five seconds by
 default, so a stalled application-session resolver or policy endpoint cannot
@@ -177,11 +173,9 @@ request fails, discovery briefly re-resolves the current session within that
 same deadline. Concurrent refreshes are latest-request-wins, so an older lookup
 cannot erase a newer verified policy.
 
-Submission intersects caller selections with the most recently verified
-policy response. When there is no verified current policy or no current
-session at submission time, it omits `automation_requests` and submits a
-vanilla report. Handrail remains the authority that re-verifies identity,
-classifies risk, and applies workflow and deployment gates.
+Submission always omits `automation_requests`, including when an older caller
+passes the deprecated option. Handrail remains the authority that re-verifies
+identity, classifies risk, and applies workflow and deployment gates.
 
 ### Redaction, screenshots, retries, and errors
 

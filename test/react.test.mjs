@@ -19,10 +19,17 @@ const policy = {
   environment: "staging",
   reporter: { identity_verified: true, access_level: "full_access" },
   reporter_notifications: { available: true, recipient_hint: "r***@example.com", lifecycles: ["fixed"] },
-  ask_options: [
-    { key: "auto_verify", label: "Verify" },
-    { key: "fix", label: "Fix" },
-  ],
+  ask_options: [],
+  automation_policy: {
+    schema_version: 3,
+    automatic_fix_max_risk: "high",
+    production_max_risk_by_impact: {
+      critical: "moderate",
+      high: "low",
+      moderate: "none",
+      low: "none",
+    },
+  },
 };
 
 function jsonResponse(body, status = 200) {
@@ -114,7 +121,7 @@ test("headless React controls are policy-derived and submit through the core pay
   assert.equal(value.canAttachScreenshot, true);
   assert.deepEqual(
     value.automationOptions.map((option) => option.key),
-    ["auto_verify", "fix"],
+    [],
   );
   await act(async () => {
     value.setAutomationRequest("fix", true);
@@ -127,7 +134,7 @@ test("headless React controls are policy-derived and submit through the core pay
       filename: "react.png",
     });
   });
-  assert.deepEqual(value.form.automationRequests, ["fix"]);
+  assert.deepEqual(value.form.automationRequests, []);
   assert.equal(value.form.screenshot.filename, "react.png");
   await act(async () => {
     value.removeScreenshot();
@@ -148,7 +155,7 @@ test("headless React controls are policy-derived and submit through the core pay
   assert.equal(body.description, "Updated without rendered UI");
   assert.equal(body.severity, "high");
   assert.equal(body.route, "/react");
-  assert.deepEqual(body.automation_requests, { fix: true });
+  assert.equal(body.automation_requests, undefined);
   assert.equal(body.reporter_sdk_runtime, "react");
   assert.equal(body.screenshot_base64, undefined);
 
