@@ -1343,6 +1343,7 @@ export function HandrailBugReporterDialog({
   const [tab, setTab] = useState<DialogTab>("report");
   const dialogRef = useRef<HTMLElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const historyPreloadedForOpenRef = useRef(false);
   const headingId = useId();
   const descriptionId = useId();
   const reportTabId = useId();
@@ -1368,13 +1369,24 @@ export function HandrailBugReporterDialog({
     };
   }, [open]);
 
+  useEffect(() => {
+    if (!open) {
+      historyPreloadedForOpenRef.current = false;
+      return;
+    }
+    if (!showHistory || historyPreloadedForOpenRef.current) return;
+    historyPreloadedForOpenRef.current = true;
+    void reporter.refreshCurrentBugs().catch(() => undefined);
+  }, [open, reporter, showHistory]);
+
   if (!open) return null;
 
   const selectTab = (next: DialogTab) => {
     setTab(next);
     if (
       next === "history"
-      && (tab !== "history" || reporter.tracking.stale)
+      && reporter.tracking.status !== "loading"
+      && (reporter.tracking.status === "idle" || reporter.tracking.stale)
     ) {
       void reporter.refreshCurrentBugs().catch(() => undefined);
     }

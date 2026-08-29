@@ -531,11 +531,14 @@ test("My bugs uses the provider history, filters, and individual archive and res
     ));
   });
 
+  assert.equal(renderer.root.findByProps({ "aria-label": "2 total" }).children.join(""), "2");
+  assert.equal(requests.filter((request) => request.method === "GET").length, 1);
   const myBugsTab = renderer.root.findAllByProps({ role: "tab" })[1];
   await act(async () => {
     myBugsTab.props.onClick();
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+  assert.equal(requests.filter((request) => request.method === "GET").length, 1);
   assert.equal(renderer.root.findAllByType("article").length, 2);
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-history": "true" }).length, 1);
   assert.equal(renderer.root.findByProps({ "aria-label": "Filter bugs by status" }).props.role, "group");
