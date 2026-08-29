@@ -120,6 +120,64 @@ function trackedBug(overrides = {}) {
   };
 }
 
+function resolutionJourney(overrides = {}) {
+  const keys = ["reported", "confirmed", "corrected", "checked", "released", "confirmed_resolved"];
+  return {
+    schema_version: 1,
+    headline: "Confirmed resolved",
+    outcome: "resolved",
+    handling: "automatic",
+    started_at: "2026-08-13T17:50:00.000Z",
+    completed_at: "2026-08-13T18:00:00.000Z",
+    total_duration_ms: 600_000,
+    verification_method: "source_code_audit",
+    verification_label: "Application source review",
+    release_environment: "staging",
+    fixed_version: "1.4.0",
+    released_version: "1.4.0",
+    automatic_fix_authorized: true,
+    automatic_delivery_authorized: true,
+    approval_required: false,
+    milestones: keys.map((key, index) => ({
+      key,
+      label: ["Reported", "Confirmed", "Corrected", "Safety checked", "Released", "Confirmed resolved"][index],
+      state: "complete",
+      started_at: `2026-08-13T17:${50 + index}:00.000Z`,
+      completed_at: `2026-08-13T17:${51 + index}:00.000Z`,
+      duration_ms: index === 0 ? 0 : 60_000,
+    })),
+    ...overrides,
+  };
+}
+
+test("history accepts a frozen safe resolution journey and ignores malformed optional projections", async () => {
+  let malformed = false;
+  const reporter = createBugReporter(reporterConfig({
+    fetch: async () => jsonResponse({
+      contract_version: "v1",
+      bugs: [trackedBug({
+        resolution_journey: malformed
+          ? resolutionJourney({ milestones: [{ key: "reported" }] })
+          : resolutionJourney(),
+      })],
+      summary: { total: 1, needs_attention: 0, in_progress: 1, closed: 0, not_reproduced: 0 },
+      query: { search: null, status_group: null, sort: "newest", visibility: "active" },
+      pagination: { limit: 20, filtered_count: 1, has_more: false, next_cursor: null },
+    }),
+  }));
+
+  const valid = await reporter.listBugs();
+  assert.equal(valid.bugs[0].resolution_journey.headline, "Confirmed resolved");
+  assert.equal(valid.bugs[0].resolution_journey.milestones.length, 6);
+  assert.equal(valid.bugs[0].resolution_journey.total_duration_ms, 600_000);
+  assert.ok(Object.isFrozen(valid.bugs[0].resolution_journey));
+  assert.ok(Object.isFrozen(valid.bugs[0].resolution_journey.milestones));
+
+  malformed = true;
+  const compatible = await reporter.listBugs();
+  assert.equal(compatible.bugs[0].resolution_journey, null);
+});
+
 test("normalizes Handrail origins, /api bases, relative paths, and full endpoints", () => {
   const cases = [
     [
@@ -236,10 +294,7 @@ test("policy lookup resolves a fresh session and accepts only verified allowlist
     requests[1].init.headers[APPLICATION_SESSION_TOKEN_HEADER],
     "policy-session-two",
   );
-  assert.deepEqual(first.askOptions, [
-    { key: "auto_verify", label: "Verify this issue" },
-    { key: "fix", label: "Fix this issue" },
-  ]);
+  assert.deepEqual(first.askOptions, []);
   assert.deepEqual(second, first);
   assert.equal(second.role, "maintainer");
   assert.ok(Object.isFrozen(second));

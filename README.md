@@ -323,6 +323,7 @@ const firstPage = await reporter.listBugs({ limit: 10 });
 
 for (const bug of firstPage.bugs) {
   console.log(bug.title, bug.status_rollup.label);
+  console.log(bug.resolution_journey?.headline);
 }
 
 const current = await reporter.getBug(firstPage.bugs[0].id);
@@ -419,6 +420,17 @@ bug-run evidence. `deployed` requires an exact recorded delivery artifact and
 prefers production evidence over staging; a completed fix is not mislabeled as
 deployed.
 
+Newer Handrail servers also return `resolution_journey`, a schema-versioned,
+customer-safe projection of the append-only bug run. Its six milestones are
+Reported, Confirmed, Corrected, Safety checked, Released, and Confirmed
+resolved. Each milestone includes exact timestamps and a duration only when
+the server has durable evidence for them; missing evidence remains `null` and
+clients must not infer precise timing from `status_rollup.updated_at`.
+`handling`, policy-authorization booleans, the verification label, and release
+versions are sanitized receipts rather than raw run payloads. The SDK validates
+and freezes a compatible projection and returns `null` for absent or malformed
+optional journey data, preserving history against older rolling servers.
+
 Each successful submission result also exposes `bugId`, allowing a caller to
 retain the canonical identity and later pass it to `getBug`.
 
@@ -481,10 +493,12 @@ actions, policy-derived Ask controls,
 an unchecked report-scoped update consent control when the verified user is
 eligible, and an owned **My bugs** view with search, status/visibility/sort
 filters, keyset pagination, and individual archive and restore actions.
-The history list labels the user’s exact submitted date and time and submitted
-app version. Expanded details retain the Bug ID for support, omit the internal
-deployment environment, and show exact fixed and deployed times when Handrail
-has that evidence.
+The history list presents each report as a colored resolution journey with
+honest complete, current, upcoming, and stopped states. Exact per-stage timing
+appears only with server evidence. Expanded details provide a resolution
+receipt with customer-safe verification, policy, checks, release, total-time,
+environment, version, and support-reference facts. Older servers retain the
+same visual progression without fabricated durations.
 After Handrail accepts a report, the form is replaced by a dedicated thank-you
 screen rather than leaving submitted fields editable. It confirms whether
 email updates were enabled, keeps notification failure separate from report

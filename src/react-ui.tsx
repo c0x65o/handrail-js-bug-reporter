@@ -18,6 +18,8 @@ import {
 } from "./react";
 import {
   MAX_SCREENSHOT_BYTES,
+  type BugResolutionJourney,
+  type BugResolutionMilestone,
   type BugTrackingStatusGroup,
   type BugTrackingVisibility,
   type ScreenshotAttachment,
@@ -147,15 +149,25 @@ const RESPONSIVE_DIALOG_CSS = `
     gap: 8px 14px !important;
     padding: 14px !important;
   }
+  [data-handrail-bug-history-overview="true"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  [data-handrail-bug-resolution-receipt="true"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
   [data-handrail-bug-history-cell="secondary"] {
     display: none !important;
   }
   [data-handrail-bug-history-cell="status"] {
     grid-column: 1;
   }
+  [data-handrail-bug-resolution-progress="true"] {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
   [data-handrail-bug-history-cell="action"] {
     grid-column: 2;
-    grid-row: 1 / span 2;
+    grid-row: 1;
   }
 }
 @media (max-width: 560px) {
@@ -513,10 +525,10 @@ const styles: Record<string, CSSProperties> = {
   },
   historyItem: {
     display: "grid",
-    gridTemplateColumns: "minmax(220px, 2.2fr) minmax(84px, .65fr) minmax(92px, .72fr) minmax(96px, .72fr) minmax(115px, 1fr) minmax(160px, 1.2fr) 136px",
+    gridTemplateColumns: "minmax(200px, 1.4fr) minmax(540px, 3.7fr) minmax(90px, .65fr) minmax(130px, .9fr) 104px",
     alignItems: "center",
-    gap: 10,
-    padding: "8px 12px",
+    gap: 14,
+    padding: "12px 14px",
     borderBottom: "1px solid var(--handrail-bug-border)",
     background: "var(--handrail-bug-surface)",
   },
@@ -537,9 +549,9 @@ const styles: Record<string, CSSProperties> = {
   },
   historyListHeader: {
     display: "grid",
-    gridTemplateColumns: "minmax(220px, 2.2fr) minmax(84px, .65fr) minmax(92px, .72fr) minmax(96px, .72fr) minmax(115px, 1fr) minmax(160px, 1.2fr) 136px",
-    gap: 10,
-    padding: "7px 12px",
+    gridTemplateColumns: "minmax(200px, 1.4fr) minmax(540px, 3.7fr) minmax(90px, .65fr) minmax(130px, .9fr) 104px",
+    gap: 14,
+    padding: "9px 14px",
     color: "var(--handrail-bug-muted-text)",
     fontSize: 11,
     fontWeight: 800,
@@ -728,11 +740,164 @@ const HISTORY_FILTERS: readonly {
   readonly label: string;
 }[] = Object.freeze([
   { value: "", label: "All" },
-  { value: "needs_attention", label: "Needs attention" },
-  { value: "in_progress", label: "In progress" },
-  { value: "closed", label: "Closed" },
-  { value: "not_reproduced", label: "Not reproduced" },
+  { value: "needs_attention", label: "Needs team review" },
+  { value: "in_progress", label: "Working" },
+  { value: "closed", label: "Finished" },
+  { value: "not_reproduced", label: "Could not confirm" },
 ]);
+
+const FALLBACK_JOURNEY_STAGES = Object.freeze([
+  { key: "reported", label: "Reported" },
+  { key: "confirmed", label: "Confirmed" },
+  { key: "corrected", label: "Corrected" },
+  { key: "checked", label: "Safety checked" },
+  { key: "released", label: "Released" },
+  { key: "confirmed_resolved", label: "Confirmed resolved" },
+] as const);
+
+function fallbackJourney(bug: TrackedBugRecord): BugResolutionJourney {
+  const stageIndex: Record<TrackedBugRecord["status_rollup"]["stage"], number> = {
+    submitted: 0,
+    verifying: 1,
+    verified: 1,
+    fixing: 2,
+    fixed: 3,
+    deployed: bug.status_rollup.reverification_status === "passed" ? 5 : 4,
+    closed: 5,
+    not_reproduced: 1,
+    wont_fix: 1,
+    needs_attention: 1,
+  };
+  const currentIndex = stageIndex[bug.status_rollup.stage];
+  const stopped = ["needs_attention", "not_reproduced", "wont_fix"].includes(
+    bug.status_rollup.stage,
+  );
+  const resolved = ["deployed", "closed"].includes(bug.status_rollup.stage)
+    && bug.status_rollup.reverification_status !== "in_progress"
+    && bug.status_rollup.reverification_status !== "failed";
+  return {
+    schema_version: 1,
+    headline: bug.status_rollup.stage === "not_reproduced"
+      ? "Could not confirm the issue"
+      : stopped ? "Needs team review"
+        : resolved ? "Confirmed resolved" : bug.status_rollup.label,
+    outcome: bug.status_rollup.stage === "not_reproduced" ? "not_reproduced"
+      : stopped ? "needs_attention" : resolved ? "resolved" : "in_progress",
+    handling: "unknown",
+    started_at: bug.first_reported_at,
+    completed_at: resolved ? bug.status_rollup.updated_at : null,
+    total_duration_ms: null,
+    verification_method: null,
+    verification_label: null,
+    release_environment: bug.status_rollup.environment,
+    fixed_version: bug.status_rollup.fixed_version,
+    released_version: bug.status_rollup.version,
+    automatic_fix_authorized: false,
+    automatic_delivery_authorized: false,
+    approval_required: false,
+    milestones: FALLBACK_JOURNEY_STAGES.map((definition, index) => ({
+      ...definition,
+      label: stopped && index === currentIndex
+        ? bug.status_rollup.stage === "not_reproduced" ? "Could not confirm" : "Needs team review"
+        : definition.label,
+      state: index < currentIndex || (resolved && index <= currentIndex)
+        ? "complete"
+        : index === currentIndex ? stopped ? "stopped" : "current" : "upcoming",
+      started_at: index === 0 ? bug.first_reported_at : null,
+      completed_at: index === 0 ? bug.first_reported_at : null,
+      duration_ms: index === 0 ? 0 : null,
+    })),
+  };
+}
+
+function journeyForBug(bug: TrackedBugRecord): BugResolutionJourney {
+  return bug.resolution_journey || fallbackJourney(bug);
+}
+
+function bugDuration(milliseconds: number | null): string {
+  if (milliseconds === null) return "—";
+  const seconds = Math.max(0, Math.round(milliseconds / 1_000));
+  if (seconds < 1) return "<1s";
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes < 60) return remainingSeconds ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+}
+
+function milestoneTone(
+  milestone: BugResolutionMilestone,
+  journey: BugResolutionJourney,
+): { color: string; surface: string } {
+  if (milestone.state === "complete") {
+    return { color: "var(--handrail-bug-success-text)", surface: "var(--handrail-bug-success-surface)" };
+  }
+  if (milestone.state === "stopped") {
+    return journey.outcome === "not_reproduced"
+      ? { color: "var(--handrail-bug-danger-text)", surface: "var(--handrail-bug-danger-surface)" }
+      : { color: "var(--handrail-bug-warning-text)", surface: "var(--handrail-bug-warning-surface)" };
+  }
+  if (milestone.state === "current") {
+    return { color: "var(--handrail-bug-info-text)", surface: "var(--handrail-bug-info-surface)" };
+  }
+  return { color: "var(--handrail-bug-border)", surface: "var(--handrail-bug-surface-muted)" };
+}
+
+function BugResolutionProgress({ bug }: { readonly bug: TrackedBugRecord }): ReactElement {
+  const journey = journeyForBug(bug);
+  return <ol
+    aria-label={`Resolution progress for ${bug.title}`}
+    data-handrail-bug-resolution-progress="true"
+    style={{ display: "grid", gridTemplateColumns: `repeat(${journey.milestones.length}, minmax(72px, 1fr))`, minWidth: 0, margin: 0, padding: 0, listStyle: "none" }}
+  >
+    {journey.milestones.map((milestone, index) => {
+      const tone = milestoneTone(milestone, journey);
+      const prior = index > 0 ? journey.milestones[index - 1] : null;
+      const connectorComplete = milestone.state === "complete" && prior?.state === "complete";
+      return <li key={milestone.key} data-handrail-bug-journey-milestone={milestone.key} style={{ position: "relative", minWidth: 0, padding: "0 4px", color: milestone.state === "upcoming" ? "var(--handrail-bug-muted-text)" : tone.color, textAlign: "center" }}>
+        {index > 0 && <span aria-hidden="true" style={{ position: "absolute", top: 8, right: "50%", left: "-50%", height: 2, background: connectorComplete ? "var(--handrail-bug-success-text)" : milestone.state === "current" ? "var(--handrail-bug-info-text)" : "var(--handrail-bug-border)" }} />}
+        <span aria-hidden="true" style={{ position: "relative", zIndex: 1, display: "grid", placeItems: "center", width: 18, height: 18, margin: "0 auto 5px", boxSizing: "border-box", border: `2px solid ${tone.color}`, borderRadius: 999, color: tone.color, background: tone.surface, boxShadow: milestone.state === "current" ? `0 0 0 4px ${tone.surface}` : undefined, fontSize: 10, fontWeight: 900 }}>
+          {milestone.state === "complete" ? "✓" : milestone.state === "stopped" ? "!" : ""}
+        </span>
+        <strong style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 10, lineHeight: 1.25 }}>{milestone.label}</strong>
+        <span style={{ display: "block", marginTop: 2, color: milestone.state === "upcoming" ? "var(--handrail-bug-muted-text)" : tone.color, fontSize: 9, lineHeight: 1.2 }}>
+          {milestone.state === "current" ? "In progress" : milestone.state === "stopped" ? "Paused" : milestone.duration_ms === null ? "" : bugDuration(milestone.duration_ms)}
+        </span>
+      </li>;
+    })}
+  </ol>;
+}
+
+function BugResolutionReceipt({ bug }: { readonly bug: TrackedBugRecord }): ReactElement {
+  const journey = journeyForBug(bug);
+  const completed = journey.milestones.filter((milestone) => milestone.state === "complete");
+  const facts = [
+    journey.verification_label && `Confirmed with ${journey.verification_label.toLocaleLowerCase()}`,
+    journey.automatic_fix_authorized && "Automation policy allowed the correction",
+    completed.some((milestone) => milestone.key === "checked") && "Required safety checks completed",
+    journey.automatic_delivery_authorized && "Release policy allowed delivery",
+    completed.some((milestone) => milestone.key === "released") && `Released${journey.release_environment ? ` to ${journey.release_environment}` : ""}`,
+    completed.some((milestone) => milestone.key === "confirmed_resolved") && "Confirmed the issue was gone",
+  ].filter(Boolean) as string[];
+  return <section aria-label={`Resolution receipt for ${bug.title}`} data-handrail-bug-resolution-receipt="true" style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: "minmax(260px, 1.35fr) minmax(220px, .65fr)", gap: 14, marginTop: 2, padding: 14, border: "1px solid color-mix(in srgb, var(--handrail-bug-accent) 18%, var(--handrail-bug-border))", borderRadius: 11, background: "linear-gradient(135deg, color-mix(in srgb, var(--handrail-bug-accent) 5%, var(--handrail-bug-surface)), var(--handrail-bug-surface))" }}>
+    <div>
+      <div style={{ color: "var(--handrail-bug-muted-text)", fontSize: 10, fontWeight: 900, letterSpacing: ".08em", textTransform: "uppercase" }}>How Handrail handled it</div>
+      <h4 style={{ margin: "5px 0 7px", fontSize: 17 }}>{journey.headline}</h4>
+      {facts.length > 0
+        ? <ul style={{ display: "grid", gap: 5, margin: 0, padding: 0, listStyle: "none", color: "var(--handrail-bug-muted-text)", fontSize: 11 }}>{facts.map((fact) => <li key={fact}><span aria-hidden="true" style={{ marginRight: 7, color: "var(--handrail-bug-success-text)", fontWeight: 900 }}>✓</span>{fact}</li>)}</ul>
+        : <p style={{ margin: 0, color: "var(--handrail-bug-muted-text)", fontSize: 11 }}>Handrail will add verification, safety, and release receipts as this report progresses.</p>}
+    </div>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8, padding: 10, border: "1px solid var(--handrail-bug-border)", borderRadius: 9, background: "var(--handrail-bug-surface)", fontSize: 10 }}>
+      <span><strong style={{ display: "block", color: "var(--handrail-bug-muted-text)" }}>Total time</strong><b style={{ fontSize: 14 }}>{bugDuration(journey.total_duration_ms)}</b></span>
+      <span><strong style={{ display: "block", color: "var(--handrail-bug-muted-text)" }}>Handling</strong><b>{journey.handling === "automatic" ? "Automatic" : journey.handling === "team_review" ? "Team review" : "Policy managed"}</b></span>
+      <span><strong style={{ display: "block", color: "var(--handrail-bug-muted-text)" }}>Environment</strong><b>{journey.release_environment || bug.environment}</b></span>
+      <span><strong style={{ display: "block", color: "var(--handrail-bug-muted-text)" }}>Released version</strong><b>{journey.released_version || journey.fixed_version || "Pending"}</b></span>
+      <span style={{ gridColumn: "1 / -1" }}><strong style={{ display: "block", color: "var(--handrail-bug-muted-text)" }}>Reference</strong><b>{bug.id}</b></span>
+    </div>
+  </section>;
+}
 
 function BugHistoryRow({
   bug,
@@ -751,18 +916,23 @@ function BugHistoryRow({
 }): ReactElement {
   const group = bugStatusGroup(bug);
   const statusTimestamp = bug.status_rollup.updated_at || bug.updated_at;
+  const journey = journeyForBug(bug);
   return <article role="row" data-handrail-bug-history-row="true" style={styles.historyItem}>
     <div role="cell" style={{ minWidth: 0 }}>
       <strong style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 13, lineHeight: 1.35 }}>{bug.title}</strong>
-      {bug.reporter_occurrence_count > 1 && <span style={{ display: "block", marginTop: 3, color: "var(--handrail-bug-muted-text)", fontSize: 11 }}>{bug.reporter_occurrence_count} reports</span>}
+      <span title={bug.reported_route || undefined} style={{ display: "block", overflow: "hidden", marginTop: 3, color: "var(--handrail-bug-muted-text)", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 10 }}>{bug.reported_route || "Page unavailable"}{bug.reported_app_version ? ` · v${bug.reported_app_version.replace(/^v/iu, "")}` : ""}</span>
+      {bug.reporter_occurrence_count > 1 && <span style={{ display: "block", marginTop: 3, color: "var(--handrail-bug-muted-text)", fontSize: 10 }}>{bug.reporter_occurrence_count} reports</span>}
     </div>
-    <span role="cell" data-handrail-bug-history-cell="secondary" style={{ display: "flex", alignItems: "center", gap: 7, color: "var(--handrail-bug-muted-text)", fontSize: 12 }}><span aria-hidden="true" style={{ width: 7, height: 7, flex: "0 0 7px", borderRadius: 999, background: severityColor(bug.severity) }} />{bugSeverityLabel(bug.severity)}</span>
-    <span role="cell" data-handrail-bug-history-cell="secondary" style={{ color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>{bugDate(bug.last_reported_at)}</span>
-    <span role="cell" data-handrail-bug-history-cell="secondary" style={{ color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>{bug.reported_app_version ? `v${bug.reported_app_version.replace(/^v/iu, "")}` : "—"}</span>
-    <span role="cell" data-handrail-bug-history-cell="secondary" title={bug.reported_route || undefined} style={{ overflow: "hidden", color: "var(--handrail-bug-muted-text)", fontSize: 12, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{bug.reported_app_flavor || bug.reported_route || "—"}</span>
-    <div role="cell" data-handrail-bug-history-cell="status" style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-      <span style={{ overflow: "hidden", maxWidth: "100%", padding: "3px 8px", border: "1px solid", borderRadius: 999, textAlign: "center", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 10, fontWeight: 800, ...statusBadgeStyle(group, bug.status_rollup.label) }}>{bug.status_rollup.label}</span>
-      <span title={bugDate(statusTimestamp)} style={{ color: "var(--handrail-bug-muted-text)", fontSize: 10 }}>{bugRelativeAge(statusTimestamp)}</span>
+    <BugResolutionProgress bug={bug} />
+    <div role="cell" data-handrail-bug-history-cell="secondary" style={{ minWidth: 0, color: "var(--handrail-bug-muted-text)", fontSize: 11 }}>
+      <span style={{ display: "flex", alignItems: "center", gap: 7 }}><span aria-hidden="true" style={{ width: 7, height: 7, flex: "0 0 7px", borderRadius: 999, background: severityColor(bug.severity) }} />{bugSeverityLabel(bug.severity)}</span>
+      {journey.handling === "automatic" && <strong style={{ display: "block", marginTop: 5, color: "var(--handrail-bug-success-text)", fontSize: 9 }}>Handled automatically</strong>}
+      {journey.handling === "team_review" && <strong style={{ display: "block", marginTop: 5, color: "var(--handrail-bug-warning-text)", fontSize: 9 }}>Team review</strong>}
+    </div>
+    <div role="cell" data-handrail-bug-history-cell="status" style={{ display: "grid", gap: 5, minWidth: 0 }}>
+      <span title={bugDate(bug.last_reported_at)} style={{ color: "var(--handrail-bug-muted-text)", fontSize: 10 }}>{bugRelativeAge(bug.last_reported_at)}</span>
+      <span style={{ overflow: "hidden", maxWidth: "100%", padding: "3px 7px", border: "1px solid", borderRadius: 6, textAlign: "center", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 9, fontWeight: 800, ...statusBadgeStyle(group, bug.status_rollup.label) }}>{journey.headline}</span>
+      {journey.total_duration_ms !== null && <strong title={bugDate(statusTimestamp)} style={{ color: "var(--handrail-bug-success-text)", fontSize: 9 }}>in {bugDuration(journey.total_duration_ms)}</strong>}
     </div>
     <div role="cell" data-handrail-bug-history-cell="action" style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
       <button type="button" aria-expanded={expanded} aria-label={`View ${bug.title}`} onClick={() => onToggle(bug.id)} style={styles.historyActionButton}>View</button>
@@ -782,15 +952,7 @@ function BugHistoryRow({
         {busy ? "Updating…" : bug.archived ? "Restore" : "Archive"}
       </button>
     </div>
-    {expanded && <div role="cell" data-handrail-bug-history-detail="true" style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, padding: "10px 12px", border: "1px solid var(--handrail-bug-border)", borderRadius: 9, color: "var(--handrail-bug-muted-text)", background: "var(--handrail-bug-surface-muted)", fontSize: 11 }}>
-      <span><strong style={{ display: "block", color: "var(--handrail-bug-text)" }}>Bug ID</strong>{bug.id}</span>
-      <span><strong style={{ display: "block", color: "var(--handrail-bug-text)" }}>Submitted</strong>{bugDate(bug.last_reported_at)}</span>
-      <span><strong style={{ display: "block", color: "var(--handrail-bug-text)" }}>App version</strong>{bug.reported_app_version ? `v${bug.reported_app_version.replace(/^v/iu, "")}` : "Not provided"}</span>
-      <span><strong style={{ display: "block", color: "var(--handrail-bug-text)" }}>Reported page</strong>{bug.reported_route || "Not provided"}</span>
-      <span><strong style={{ display: "block", color: "var(--handrail-bug-text)" }}>Occurrences</strong>{bug.occurrence_count}</span>
-      {bug.fixed_at && <span><strong style={{ display: "block", color: "var(--handrail-bug-text)" }}>Fixed</strong>{bugDate(bug.fixed_at)}</span>}
-      {bug.status_rollup.stage === "deployed" && statusTimestamp && <span><strong style={{ display: "block", color: "var(--handrail-bug-text)" }}>Deployed</strong>{bugDate(statusTimestamp)}</span>}
-    </div>}
+    {expanded && <div role="cell" data-handrail-bug-history-detail="true" style={{ display: "contents" }}><BugResolutionReceipt bug={bug} /></div>}
   </article>;
 }
 
@@ -899,15 +1061,18 @@ function BugHistory({ onClose }: { readonly onClose: () => void }): ReactElement
   };
 
   return <section aria-label="My bugs" aria-busy={reporter.tracking.status === "loading"} data-handrail-bug-history="true" style={{ display: "flex", width: "100%", minHeight: 0, flex: "1 1 auto", flexDirection: "column", boxSizing: "border-box" }}>
-    <div style={styles.historyOverview}>
-      <div style={{ display: "flex", alignItems: "center", gap: 9, color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>
-        {visibility === "archived"
-          ? <><strong style={{ color: "var(--handrail-bug-text)" }}>{total}</strong> archived bug{total === 1 ? "" : "s"}</>
-          : <><span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: 999, background: "var(--handrail-bug-danger-text)" }} /><strong style={{ color: "var(--handrail-bug-text)" }}>{summary?.needs_attention ?? countFor("needs_attention")}</strong> need attention <span aria-hidden="true" style={{ width: 1, height: 16, margin: "0 4px", background: "var(--handrail-bug-border)" }} /><span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: 999, background: "var(--handrail-bug-info-text)" }} /><strong style={{ color: "var(--handrail-bug-text)" }}>{summary?.in_progress ?? countFor("in_progress")}</strong> in progress</>}
-      </div>
-      <span style={{ color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>
-        {reporter.tracking.status === "loading" ? "Updating…" : reporter.tracking.status === "ready" ? "Updated just now" : ""}
-      </span>
+    <div data-handrail-bug-history-overview="true" style={{ ...styles.historyOverview, display: "grid", gridTemplateColumns: "repeat(4, minmax(120px, 1fr))", overflow: "hidden", border: "1px solid var(--handrail-bug-border)", borderRadius: 11, background: "var(--handrail-bug-surface)" }}>
+      {visibility === "archived"
+        ? <div style={{ gridColumn: "1 / -1", padding: "12px 14px", color: "var(--handrail-bug-muted-text)", fontSize: 12 }}><strong style={{ marginRight: 5, color: "var(--handrail-bug-text)", fontSize: 20 }}>{total}</strong> archived report{total === 1 ? "" : "s"}</div>
+        : [
+            { label: "All reports", value: total, color: "var(--handrail-bug-text)" },
+            { label: "Working", value: summary?.in_progress ?? countFor("in_progress"), color: "var(--handrail-bug-info-text)" },
+            { label: "Needs team review", value: summary?.needs_attention ?? countFor("needs_attention"), color: "var(--handrail-bug-warning-text)" },
+            { label: "Finished", value: summary?.closed ?? countFor("closed"), color: "var(--handrail-bug-success-text)" },
+          ].map((item, index) => <div key={item.label} style={{ padding: "11px 14px", borderLeft: index ? "1px solid var(--handrail-bug-border)" : 0 }}>
+            <strong style={{ display: "block", color: item.color, fontSize: 20, lineHeight: 1.1 }}>{item.value}</strong>
+            <span style={{ color: "var(--handrail-bug-muted-text)", fontSize: 10 }}>{item.label}</span>
+          </div>)}
     </div>
 
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
@@ -995,7 +1160,7 @@ function BugHistory({ onClose }: { readonly onClose: () => void }): ReactElement
     {reporter.tracking.status === "error" && !historyActionError && <div role="alert" style={{ ...styles.status, background: "var(--handrail-bug-danger-surface)", color: "var(--handrail-bug-danger-text)" }}>{reporter.tracking.error?.message || "Bug history could not be loaded."}</div>}
     {showHistoryResults && <div role="table" aria-label="Reported bugs" data-handrail-bug-history-list="true" style={{ ...styles.historyList, flex: "1 1 auto", opacity: reporter.tracking.status === "loading" ? 0.68 : 1 }}>
       <div role="row" data-handrail-bug-history-header="true" style={styles.historyListHeader}>
-        <span role="columnheader">Issue</span><span role="columnheader">Severity</span><span role="columnheader">Submitted</span><span role="columnheader">App version</span><span role="columnheader">Page / path</span><span role="columnheader">Status</span><span role="columnheader">Action</span>
+        <span role="columnheader">Issue</span><span role="columnheader">Resolution progress</span><span role="columnheader">Impact</span><span role="columnheader">Reported</span><span role="columnheader">Action</span>
       </div>
       {reporter.tracking.bugs.length === 0
         ? <div role="status" style={{ display: "grid", placeItems: "center", minHeight: 180, padding: 24, color: "var(--handrail-bug-muted-text)", textAlign: "center" }}>

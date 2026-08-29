@@ -233,7 +233,50 @@ export interface BugTrackingStatusRollup {
   readonly fixed_version: string | null;
   /** Current deployed application version for deployed stages. */
   readonly version: string | null;
+  readonly reverification_status?: "in_progress" | "passed" | "failed" | null;
   readonly updated_at: string | null;
+}
+
+export type BugResolutionMilestoneKey =
+  | "reported"
+  | "confirmed"
+  | "corrected"
+  | "checked"
+  | "released"
+  | "confirmed_resolved";
+
+export type BugResolutionMilestoneState =
+  | "complete"
+  | "current"
+  | "upcoming"
+  | "stopped";
+
+export interface BugResolutionMilestone {
+  readonly key: BugResolutionMilestoneKey;
+  readonly label: string;
+  readonly state: BugResolutionMilestoneState;
+  readonly started_at: string | null;
+  readonly completed_at: string | null;
+  readonly duration_ms: number | null;
+}
+
+export interface BugResolutionJourney {
+  readonly schema_version: 1;
+  readonly headline: string;
+  readonly outcome: "in_progress" | "resolved" | "needs_attention" | "not_reproduced";
+  readonly handling: "automatic" | "team_review" | "unknown";
+  readonly started_at: string | null;
+  readonly completed_at: string | null;
+  readonly total_duration_ms: number | null;
+  readonly verification_method: string | null;
+  readonly verification_label: string | null;
+  readonly release_environment: string | null;
+  readonly fixed_version: string | null;
+  readonly released_version: string | null;
+  readonly automatic_fix_authorized: boolean;
+  readonly automatic_delivery_authorized: boolean;
+  readonly approval_required: boolean;
+  readonly milestones: readonly BugResolutionMilestone[];
 }
 
 export interface TrackedBugRecord {
@@ -246,6 +289,8 @@ export interface TrackedBugRecord {
   /** Stable semantic group for app-owned filters and status styling. */
   readonly status_group: BugTrackingStatusGroup;
   readonly status_rollup: BugTrackingStatusRollup;
+  /** Customer-safe lifecycle projection. Null against older Handrail servers. */
+  readonly resolution_journey: BugResolutionJourney | null;
   /** Metadata from this reporter's latest submission for the canonical bug. */
   readonly reported_app_version: string | null;
   readonly reported_route: string | null;
@@ -867,6 +912,20 @@ const BUG_TRACKING_STAGES = new Set<BugTrackingStage>([
 const BUG_TRACKING_STATUS_GROUP_SET = new Set<BugTrackingStatusGroup>(
   BUG_TRACKING_STATUS_GROUPS,
 );
+const BUG_RESOLUTION_MILESTONE_KEY_SET = new Set<BugResolutionMilestoneKey>([
+  "reported",
+  "confirmed",
+  "corrected",
+  "checked",
+  "released",
+  "confirmed_resolved",
+]);
+const BUG_RESOLUTION_MILESTONE_STATE_SET = new Set<BugResolutionMilestoneState>([
+  "complete",
+  "current",
+  "upcoming",
+  "stopped",
+]);
 const BUG_TRACKING_SORT_SET = new Set<BugTrackingSort>(BUG_TRACKING_SORTS);
 const BUG_TRACKING_VISIBILITY_SET = new Set<BugTrackingVisibility>(
   BUG_TRACKING_VISIBILITIES,
@@ -914,6 +973,73 @@ function statusGroupForRollup(
   if (stage === "needs_attention") return "needs_attention";
   if (stage === "not_reproduced") return "not_reproduced";
   return terminal ? "closed" : "in_progress";
+}
+
+function bugResolutionJourney(input: unknown): BugResolutionJourney | null {
+  const record = plainRecord(input);
+  if (!record || record.schema_version !== 1) return null;
+  const headline = nullableString(record.headline);
+  const outcome = nullableString(record.outcome) as BugResolutionJourney["outcome"] | null;
+  const handling = nullableString(record.handling) as BugResolutionJourney["handling"] | null;
+  if (
+    !headline
+    || !outcome
+    || !["in_progress", "resolved", "needs_attention", "not_reproduced"].includes(outcome)
+    || !handling
+    || !["automatic", "team_review", "unknown"].includes(handling)
+    || typeof record.automatic_fix_authorized !== "boolean"
+    || typeof record.automatic_delivery_authorized !== "boolean"
+    || typeof record.approval_required !== "boolean"
+    || !Array.isArray(record.milestones)
+  ) return null;
+  const milestones: BugResolutionMilestone[] = [];
+  const seen = new Set<BugResolutionMilestoneKey>();
+  for (const inputMilestone of record.milestones) {
+    const milestone = plainRecord(inputMilestone);
+    const key = nullableString(milestone?.key) as BugResolutionMilestoneKey | null;
+    const label = nullableString(milestone?.label);
+    const state = nullableString(milestone?.state) as BugResolutionMilestoneState | null;
+    const duration = milestone?.duration_ms === null
+      ? null
+      : nonNegativeNumber(milestone?.duration_ms, Number.NaN);
+    if (
+      !milestone || !key || !BUG_RESOLUTION_MILESTONE_KEY_SET.has(key) || seen.has(key)
+      || !label || !state || !BUG_RESOLUTION_MILESTONE_STATE_SET.has(state)
+      || (duration !== null && !Number.isFinite(duration))
+    ) return null;
+    seen.add(key);
+    milestones.push(Object.freeze({
+      key,
+      label,
+      state,
+      started_at: nullableString(milestone.started_at),
+      completed_at: nullableString(milestone.completed_at),
+      duration_ms: duration,
+    }));
+  }
+  if (milestones.length !== BUG_RESOLUTION_MILESTONE_KEY_SET.size) return null;
+  const totalDuration = record.total_duration_ms === null
+    ? null
+    : nonNegativeNumber(record.total_duration_ms, Number.NaN);
+  if (totalDuration !== null && !Number.isFinite(totalDuration)) return null;
+  return Object.freeze({
+    schema_version: 1,
+    headline,
+    outcome,
+    handling,
+    started_at: nullableString(record.started_at),
+    completed_at: nullableString(record.completed_at),
+    total_duration_ms: totalDuration,
+    verification_method: nullableString(record.verification_method),
+    verification_label: nullableString(record.verification_label),
+    release_environment: nullableString(record.release_environment),
+    fixed_version: nullableString(record.fixed_version),
+    released_version: nullableString(record.released_version),
+    automatic_fix_authorized: record.automatic_fix_authorized,
+    automatic_delivery_authorized: record.automatic_delivery_authorized,
+    approval_required: record.approval_required,
+    milestones: Object.freeze(milestones),
+  });
 }
 
 function trackedBugRecord(input: unknown): TrackedBugRecord | null {
@@ -970,8 +1096,14 @@ function trackedBugRecord(input: unknown): TrackedBugRecord | null {
       environment: nullableString(rollup.environment),
       fixed_version: nullableString(rollup.fixed_version),
       version: nullableString(rollup.version),
+      reverification_status: ["in_progress", "passed", "failed"].includes(
+        nullableString(rollup.reverification_status) || "",
+      )
+        ? nullableString(rollup.reverification_status) as "in_progress" | "passed" | "failed"
+        : null,
       updated_at: nullableString(rollup.updated_at),
     }),
+    resolution_journey: bugResolutionJourney(record.resolution_journey),
     reported_app_version: nullableString(record.reported_app_version),
     reported_route: nullableString(record.reported_route),
     reported_app_flavor: nullableString(record.reported_app_flavor),

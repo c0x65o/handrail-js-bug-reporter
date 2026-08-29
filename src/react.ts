@@ -311,8 +311,11 @@ export function HandrailBugReporterProvider({
     useState<BugReporterTrackingState>(EMPTY_TRACKING);
   const policyDiscoveryGeneration = useRef(0);
   const trackingGeneration = useRef(0);
+  const previousReporterRef = useRef(reporter);
 
   useEffect(() => {
+    if (previousReporterRef.current === reporter) return;
+    previousReporterRef.current = reporter;
     trackingGeneration.current += 1;
     setTracking(EMPTY_TRACKING);
   }, [reporter]);
