@@ -263,7 +263,7 @@ export interface BugResolutionMilestone {
 export interface BugResolutionJourney {
   readonly schema_version: 1;
   readonly headline: string;
-  readonly outcome: "in_progress" | "resolved" | "needs_attention" | "not_reproduced";
+  readonly outcome: "in_progress" | "resolved" | "needs_attention" | "not_reproduced" | "closed";
   readonly handling: "automatic" | "team_review" | "unknown";
   readonly started_at: string | null;
   readonly completed_at: string | null;
@@ -290,7 +290,7 @@ export interface TrackedBugRecord {
   readonly status_group: BugTrackingStatusGroup;
   readonly status_rollup: BugTrackingStatusRollup;
   /** Customer-safe lifecycle projection. Null against older Handrail servers. */
-  readonly resolution_journey: BugResolutionJourney | null;
+  readonly resolution_journey?: BugResolutionJourney | null;
   /** Metadata from this reporter's latest submission for the canonical bug. */
   readonly reported_app_version: string | null;
   readonly reported_route: string | null;
@@ -984,7 +984,7 @@ function bugResolutionJourney(input: unknown): BugResolutionJourney | null {
   if (
     !headline
     || !outcome
-    || !["in_progress", "resolved", "needs_attention", "not_reproduced"].includes(outcome)
+    || !["in_progress", "resolved", "needs_attention", "not_reproduced", "closed"].includes(outcome)
     || !handling
     || !["automatic", "team_review", "unknown"].includes(handling)
     || typeof record.automatic_fix_authorized !== "boolean"

@@ -768,21 +768,27 @@ function fallbackJourney(bug: TrackedBugRecord): BugResolutionJourney {
     wont_fix: 1,
     needs_attention: 1,
   };
-  const currentIndex = stageIndex[bug.status_rollup.stage];
+  const resolved = (
+    bug.status_rollup.stage === "deployed"
+    && bug.status_rollup.reverification_status !== "in_progress"
+    && bug.status_rollup.reverification_status !== "failed"
+  ) || (bug.status_rollup.stage === "closed" && Boolean(bug.fixed_at));
+  const currentIndex = bug.status_rollup.stage === "closed" && !resolved
+    ? 0
+    : stageIndex[bug.status_rollup.stage];
   const stopped = ["needs_attention", "not_reproduced", "wont_fix"].includes(
     bug.status_rollup.stage,
-  );
-  const resolved = ["deployed", "closed"].includes(bug.status_rollup.stage)
-    && bug.status_rollup.reverification_status !== "in_progress"
-    && bug.status_rollup.reverification_status !== "failed";
+  ) || (bug.status_rollup.stage === "closed" && !resolved);
   return {
     schema_version: 1,
     headline: bug.status_rollup.stage === "not_reproduced"
       ? "Could not confirm the issue"
-      : stopped ? "Needs team review"
+      : bug.status_rollup.stage === "closed" ? "Closed"
+        : stopped ? "Needs team review"
         : resolved ? "Confirmed resolved" : bug.status_rollup.label,
     outcome: bug.status_rollup.stage === "not_reproduced" ? "not_reproduced"
-      : stopped ? "needs_attention" : resolved ? "resolved" : "in_progress",
+      : bug.status_rollup.stage === "closed" && !resolved ? "closed"
+        : stopped ? "needs_attention" : resolved ? "resolved" : "in_progress",
     handling: "unknown",
     started_at: bug.first_reported_at,
     completed_at: resolved ? bug.status_rollup.updated_at : null,
@@ -798,7 +804,8 @@ function fallbackJourney(bug: TrackedBugRecord): BugResolutionJourney {
     milestones: FALLBACK_JOURNEY_STAGES.map((definition, index) => ({
       ...definition,
       label: stopped && index === currentIndex
-        ? bug.status_rollup.stage === "not_reproduced" ? "Could not confirm" : "Needs team review"
+        ? bug.status_rollup.stage === "not_reproduced" ? "Could not confirm"
+          : bug.status_rollup.stage === "closed" ? "Closed" : "Needs team review"
         : definition.label,
       state: index < currentIndex || (resolved && index <= currentIndex)
         ? "complete"
