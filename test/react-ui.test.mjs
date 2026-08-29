@@ -12,6 +12,12 @@ const {
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+function renderedText(node) {
+  if (Array.isArray(node)) return node.map(renderedText).join("");
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  return node && typeof node === "object" ? renderedText(node.children || []) : "";
+}
+
 function jsonResponse(body, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -23,7 +29,7 @@ const reporterPolicy = {
   schema_version: 1,
   project_id: "project-123",
   environment: "staging",
-  reporter: { identity_verified: true, access_level: "full_access" },
+  reporter: { identity_verified: true, access_level: "user", role: "contributor" },
   ask_options: [],
   automation_policy: {
     schema_version: 3,
@@ -370,6 +376,11 @@ test("the packaged form delegates upload, paste, drop, thumbnail, policy, automa
   assert.equal(renderer.root.findAllByProps({ children: "clipboard.png" }).length, 0);
 
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-automation-policy": "true" }).length, 1);
+  renderer.root.findByProps({ "data-handrail-bug-access-summary": "true" });
+  assert.match(renderedText(renderer.toJSON()), /Your access/u);
+  assert.match(renderedText(renderer.toJSON()), /Contributor/u);
+  assert.match(renderedText(renderer.toJSON()), /Automatic repair: up to high change risk/u);
+  assert.match(renderedText(renderer.toJSON()), /Production eligibility for verified Moderate impact: not automatic/u);
   await act(async () => renderer.root.findByProps({ "aria-label": "Email me when this bug is fixed" }).props.onChange({ target: { checked: true } }));
   assert.equal(renderer.root.findByProps({ "aria-label": "Email me when this bug is fixed" }).props.checked, true);
   const severity = renderer.root.findByProps({ "aria-label": "Bug severity" });
@@ -384,6 +395,7 @@ test("the packaged form delegates upload, paste, drop, thumbnail, policy, automa
     ],
   );
   await act(async () => severity.props.onChange({ target: { value: "high" } }));
+  assert.match(renderedText(renderer.toJSON()), /Production eligibility for verified High impact: up to low change risk/u);
 
   const reportForm = renderer.root.findAll((node) => node.type === "form")[0];
   await act(async () => reportForm.props.onSubmit({ preventDefault: () => undefined }));
@@ -413,6 +425,28 @@ test("the packaged form delegates upload, paste, drop, thumbnail, policy, automa
   await act(async () => renderer.root.findByProps({ children: "Report another bug" }).props.onClick());
   assert.equal(renderer.root.findByProps({ placeholder: "What is broken?" }).props.value, "");
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-submission-success": "true" }).length, 0);
+  await act(async () => renderer.unmount());
+});
+
+test("the packaged form keeps the verified role visible without automation thresholds", async () => {
+  const roleOnlyPolicy = {
+    ...reporterPolicy,
+    reporter: { identity_verified: true, access_level: "full_access", role: "maintainer" },
+    automation_policy: undefined,
+    reporter_notifications: { available: false, recipient_hint: null, lifecycles: ["fixed"] },
+  };
+  let renderer;
+  await act(async () => {
+    renderer = create(createElement(
+      HandrailBugReporterProvider,
+      { config: config(async () => jsonResponse(roleOnlyPolicy)) },
+      createElement(HandrailBugReporterDialog, { open: true, onClose: () => undefined }),
+    ));
+  });
+
+  renderer.root.findByProps({ "data-handrail-bug-access-summary": "true" });
+  assert.match(renderedText(renderer.toJSON()), /Maintainer/u);
+  assert.doesNotMatch(renderedText(renderer.toJSON()), /Automatic repair:/u);
   await act(async () => renderer.unmount());
 });
 

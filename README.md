@@ -158,9 +158,12 @@ or throws, ordinary bug reporting continues without verified attribution.
 
 Policy discovery is best effort and never downloads Known Users. The SDK
 accepts only a version-1 response for the configured project and environment
-whose reporter identity is server-verified. The packaged UI shows the captured
-Requester, Contributor, or Maintainer policy as read-only context: the maximum
-automatic fix risk and the production risk threshold for the selected impact.
+whose reporter identity is server-verified. The packaged UI shows a compact
+**Your access** summary whenever verified policy discovery succeeds. It always
+names the effective Requester, Contributor, or Maintainer role and, when
+advertised, shows the maximum automatic repair risk and production threshold
+for the selected impact. Changing Impact updates the personal summary without
+exposing the full project policy matrix.
 Bug reporters never receive staging or production controls. Deployment is
 decided by Handrail after impact and change risk are verified.
 

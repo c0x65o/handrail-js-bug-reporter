@@ -1210,12 +1210,18 @@ function BugReportForm({ onCancel }: { readonly onCancel: () => void }): ReactEl
     ? "Maintainer"
     : reporter.policy?.role === "contributor"
       ? "Contributor"
-      : "Requester";
+      : reporter.policy?.role === "requester"
+        ? "Requester"
+        : reporter.policy?.accessLevel === "full_access"
+          ? "Maintainer"
+          : reporter.policy?.accessLevel === "user"
+            ? "Contributor"
+            : "Requester";
   const productionMaxRisk = automationPolicy
     ?.productionMaxRiskByImpact[reporter.form.impact];
   const riskLabel = (risk: string | undefined): string => risk === "none"
-    ? "disabled"
-    : risk ? `up to ${risk} risk` : "not available";
+    ? "not automatic"
+    : risk ? `up to ${risk} change risk` : "not available";
 
   useEffect(() => {
     if (!notificationsAvailable && reporter.form.notifyOnResolution) {
@@ -1472,15 +1478,15 @@ function BugReportForm({ onCancel }: { readonly onCancel: () => void }): ReactEl
           <p style={{ margin: 0, padding: "8px 12px", color: "var(--handrail-bug-muted-text)", background: "var(--handrail-bug-surface-muted)", fontSize: 10 }}>This context is included with this report.</p>
         </section>
 
-        {reporter.policyStatus === "loading" && <div role="status" style={{ color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>Loading automation policy…</div>}
-        {automationPolicy && <section data-handrail-bug-automation-policy="true" style={{ overflow: "hidden", border: "1px solid var(--handrail-bug-border)", borderRadius: 9, background: "var(--handrail-bug-surface)" }}>
-          <h3 style={{ margin: 0, padding: "9px 12px", borderBottom: "1px solid var(--handrail-bug-border)", fontSize: 12 }}>Automation policy</h3>
+        {reporter.policyStatus === "loading" && <div role="status" style={{ color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>Loading access policy…</div>}
+        {reporter.policy && <section data-handrail-bug-access-summary="true" data-handrail-bug-automation-policy="true" style={{ overflow: "hidden", border: "1px solid var(--handrail-bug-border)", borderRadius: 9, background: "var(--handrail-bug-surface)" }}>
+          <h3 style={{ margin: 0, padding: "9px 12px", borderBottom: "1px solid var(--handrail-bug-border)", fontSize: 12 }}>Your access</h3>
           <div style={{ padding: "8px 12px", fontSize: 11 }}>
-            <strong>{automationRole}</strong>
-            <span style={{ display: "block", marginTop: 3, color: "var(--handrail-bug-muted-text)" }}>Automatic fix: {riskLabel(automationPolicy.automaticFixMaxRisk)}</span>
-            <span style={{ display: "block", marginTop: 2, color: "var(--handrail-bug-muted-text)" }}>Production for verified {reporter.form.impact} impact: {riskLabel(productionMaxRisk)}</span>
+            <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}><span style={{ color: "var(--handrail-bug-muted-text)" }}>Role</span><strong>{automationRole}</strong></span>
+            {automationPolicy && <span style={{ display: "block", marginTop: 5, color: "var(--handrail-bug-muted-text)" }}>Automatic repair: {riskLabel(automationPolicy.automaticFixMaxRisk)}</span>}
+            {productionMaxRisk && <span style={{ display: "block", marginTop: 2, color: "var(--handrail-bug-muted-text)" }}>Production eligibility for verified {bugSeverityLabel(reporter.form.impact)} impact: {riskLabel(productionMaxRisk)}</span>}
           </div>
-          <p style={{ margin: 0, padding: "8px 12px", color: "var(--handrail-bug-muted-text)", background: "var(--handrail-bug-surface-muted)", fontSize: 10 }}>Deployment is decided by verified impact and change risk. This report cannot authorize deployment.</p>
+          <p style={{ margin: 0, padding: "8px 12px", color: "var(--handrail-bug-muted-text)", background: "var(--handrail-bug-surface-muted)", fontSize: 10 }}>Final deployment is evaluated separately under the project deployment policy.</p>
         </section>}
 
         {notificationsAvailable && <fieldset style={{ ...styles.fieldset, margin: 0 }}>
