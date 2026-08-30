@@ -508,7 +508,9 @@ email updates were enabled, keeps notification failure separate from report
 success, and offers **Report another bug** and **Done** actions.
 Successful submission also marks any previously loaded **My bugs** query stale;
 opening the tab revalidates that query so the accepted report appears without a
-page refresh or unrelated filter change.
+page refresh or unrelated filter change. While **My bugs** remains open, the
+packaged UI refreshes its current query every 15 seconds so server-side progress
+changes appear without reopening the tab.
 
 `appearance.themeMode` accepts `auto`, `light`, or `dark`. `auto` is the
 default and follows the host color scheme while supplying a polished,

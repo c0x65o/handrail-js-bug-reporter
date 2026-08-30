@@ -746,6 +746,8 @@ const HISTORY_FILTERS: readonly {
   { value: "not_reproduced", label: "Could not confirm" },
 ]);
 
+const HISTORY_REFRESH_INTERVAL_MS = 15_000;
+
 const FALLBACK_JOURNEY_STAGES = Object.freeze([
   { key: "reported", label: "Reported" },
   { key: "confirmed", label: "Confirmed" },
@@ -980,6 +982,8 @@ function BugHistory({ onClose }: { readonly onClose: () => void }): ReactElement
   const [expandedBugId, setExpandedBugId] = useState<string | null>(null);
   const [historyActionError, setHistoryActionError] = useState<string | null>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const trackingStatusRef = useRef(reporter.tracking.status);
+  trackingStatusRef.current = reporter.tracking.status;
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") return undefined;
@@ -1014,6 +1018,26 @@ function BugHistory({ onClose }: { readonly onClose: () => void }): ReactElement
       setHistoryActionError(error instanceof Error ? error.message : "Bug history could not be loaded.");
     }
   };
+
+  useEffect(() => {
+    const refreshBugs = reporter.refreshBugs;
+    const currentQuery: BugReporterTrackingQueryOptions = {
+      search: search.trim() || undefined,
+      statusGroup: statusGroup || undefined,
+      visibility,
+      sort,
+    };
+    const interval = setInterval(() => {
+      if (trackingStatusRef.current === "loading") return;
+      setHistoryActionError(null);
+      void refreshBugs(currentQuery).catch((error) => {
+        setHistoryActionError(
+          error instanceof Error ? error.message : "Bug history could not be loaded.",
+        );
+      });
+    }, HISTORY_REFRESH_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [reporter.refreshBugs, search, sort, statusGroup, visibility]);
 
   const changeArchive = async (bugId: string, archived: boolean) => {
     setBusyBugId(bugId);

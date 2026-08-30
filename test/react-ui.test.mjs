@@ -704,3 +704,79 @@ test("a submitted bug marks loaded tracking stale and refreshes it when My bugs 
   assert.equal(renderer.root.findAllByProps({ "aria-label": "View Bug bug-new" }).length, 1);
   await act(async () => renderer.unmount());
 });
+
+test("My bugs refreshes every 15 seconds while the history tab stays open", async () => {
+  let listCalls = 0;
+  const fetch = async () => {
+    listCalls += 1;
+    const bug = trackedBug(`poll-${listCalls}`);
+    return jsonResponse({
+      contract_version: "v1",
+      bugs: [bug],
+      summary: {
+        total: 1,
+        needs_attention: 0,
+        in_progress: 1,
+        closed: 0,
+        not_reproduced: 0,
+      },
+      query: {
+        search: null,
+        status_group: null,
+        sort: "newest",
+        visibility: "active",
+      },
+      pagination: {
+        limit: 20,
+        filtered_count: 1,
+        has_more: false,
+        next_cursor: null,
+      },
+    });
+  };
+
+  let renderer;
+  await act(async () => {
+    renderer = create(createElement(
+      HandrailBugReporterProvider,
+      { config: config(fetch), loadPolicyOnMount: false },
+      createElement(HandrailBugReporterDialog, { open: true, onClose: () => undefined }),
+    ));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  const originalSetInterval = globalThis.setInterval;
+  const originalClearInterval = globalThis.clearInterval;
+  let intervalCallback;
+  let intervalDelay;
+  let intervalCleared = false;
+  globalThis.setInterval = (callback, delay) => {
+    intervalCallback = callback;
+    intervalDelay = delay;
+    return 15_000;
+  };
+  globalThis.clearInterval = (interval) => {
+    if (interval === 15_000) intervalCleared = true;
+  };
+
+  try {
+    await act(async () => renderer.root.findAllByProps({ role: "tab" })[1].props.onClick());
+    assert.equal(intervalDelay, 15_000);
+    assert.equal(typeof intervalCallback, "function");
+    const callsBeforePoll = listCalls;
+
+    await act(async () => {
+      intervalCallback();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    assert.equal(listCalls, callsBeforePoll + 1);
+    assert.equal(renderer.root.findAllByProps({ "aria-label": `View Bug poll-${listCalls}` }).length, 1);
+    await act(async () => renderer.root.findAllByProps({ role: "tab" })[0].props.onClick());
+    assert.equal(intervalCleared, true);
+  } finally {
+    globalThis.setInterval = originalSetInterval;
+    globalThis.clearInterval = originalClearInterval;
+    await act(async () => renderer.unmount());
+  }
+});
