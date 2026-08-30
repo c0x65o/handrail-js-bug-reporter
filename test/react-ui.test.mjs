@@ -135,12 +135,10 @@ test("the packaged UI is opt-in and the launcher mounts a separate dialog", asyn
   assert.match(dialogCss, /button \{\s+appearance: none;/u);
   assert.match(dialogCss, /:focus-visible \{\s+outline: 2px solid var\(--handrail-bug-accent\) !important;/u);
   assert.match(dialogCss, /data-handrail-bug-report-form/u);
-  const [reportTab, historyTab] = renderer.root.findAllByProps({ role: "tab" });
-  assert.equal(reportTab.props.style.WebkitAppearance, "none");
-  assert.equal(reportTab.props.style.color, "var(--handrail-bug-accent-text)");
-  assert.equal(reportTab.props.style.background, "var(--handrail-bug-accent)");
-  assert.equal(historyTab.props.style.color, "var(--handrail-bug-muted-text)");
-  assert.equal(historyTab.props.style.background, "var(--handrail-bug-surface)");
+  const historySwitch = renderer.root.findByProps({ "data-handrail-bug-view-switch": "history" });
+  assert.equal(historySwitch.props.style.WebkitAppearance, "none");
+  assert.equal(historySwitch.props.style.color, "var(--handrail-bug-text)");
+  assert.equal(historySwitch.props.style.background, "var(--handrail-bug-surface)");
 
   await act(async () => renderer.root.findByProps({ "aria-label": "Close bug reporter" }).props.onClick());
   assert.equal(renderer.root.findAllByProps({ role: "dialog" }).length, 0);
@@ -539,12 +537,13 @@ test("My bugs uses the provider history, filters, and individual archive and res
         trackedBug("bug-1", archived),
         {
           ...closedBug,
+          fixed_at: "2026-08-14T18:00:00.000Z",
           status: "fixed",
           status_group: "closed",
           status_rollup: {
             ...closedBug.status_rollup,
-            stage: "fixed",
-            label: "Fixed",
+            stage: "closed",
+            label: "Resolved",
             terminal: true,
             raw_status: "fixed",
             workflow_state: "fixed",
@@ -568,7 +567,7 @@ test("My bugs uses the provider history, filters, and individual archive and res
 
   assert.equal(renderer.root.findByProps({ "aria-label": "2 total" }).children.join(""), "2");
   assert.equal(requests.filter((request) => request.method === "GET").length, 1);
-  const myBugsTab = renderer.root.findAllByProps({ role: "tab" })[1];
+  const myBugsTab = renderer.root.findByProps({ "data-handrail-bug-view-switch": "history" });
   await act(async () => {
     myBugsTab.props.onClick();
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -580,25 +579,31 @@ test("My bugs uses the provider history, filters, and individual archive and res
   assert.equal(renderer.root.findByProps({ role: "dialog" }).props.style.height, "min(720px, calc(100dvh - 16px))");
   assert.equal(renderer.root.findByProps({ role: "table" }).props["aria-label"], "Reported bugs");
   const historyHeaders = renderer.root.findAllByProps({ role: "columnheader" }).map((node) => node.children.join(""));
-  assert.ok(historyHeaders.includes("Resolution progress"));
+  assert.deepEqual(historyHeaders, ["Issue", "Status", "Progress", "Impact", "Updated", "Action"]);
   assert.ok(historyHeaders.includes("Impact"));
-  assert.ok(historyHeaders.includes("Reported"));
   assert.equal(historyHeaders.includes("App version"), false);
   assert.equal(historyHeaders.includes("Date"), false);
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-history-row": "true" }).length, 2);
-  assert.equal(renderer.root.findAll((node) => node.props["data-handrail-bug-journey-milestone"]).length, 12);
+  assert.equal(renderer.root.findAll((node) => node.props["data-handrail-bug-journey-milestone"]).length, 0);
+  assert.deepEqual(
+    renderer.root.findAllByType("span").map(renderedText).filter((text) => /^Step \d of 6$/u.test(text)),
+    ["Step 1 of 6", "Step 6 of 6"],
+  );
+  assert.equal(renderer.root.findByProps({ children: "In progress" }).props.style.color, "var(--handrail-bug-info-text)");
+  assert.equal(renderer.root.findByProps({ children: "Resolved" }).props.style.color, "var(--handrail-bug-success-text)");
+  assert.ok(renderer.root.findAllByProps({ "data-handrail-bug-history-row": "true" }).every((row) => row.props.style.height === 76));
   assert.ok(renderer.root.findAllByType("span").some((node) => (
     /^Updated .+ ago$/u.test(node.children.join(""))
   )));
-  const [, selectedMyBugsTab] = renderer.root.findAllByProps({ role: "tab" });
-  assert.equal(selectedMyBugsTab.props.style.color, "var(--handrail-bug-accent-text)");
-  assert.equal(selectedMyBugsTab.props.style.background, "var(--handrail-bug-accent)");
+  assert.equal(renderer.root.findByType("h2").children.join(""), "My bug reports");
+  const reportSwitch = renderer.root.findByProps({ "data-handrail-bug-view-switch": "report" });
+  assert.equal(reportSwitch.props.style.color, "var(--handrail-bug-accent-text)");
+  assert.equal(reportSwitch.props.style.background, "var(--handrail-bug-accent)");
   const visibilityButtons = renderer.root.findByProps({ "aria-label": "Bug history visibility" }).findAllByType("button");
   assert.equal(visibilityButtons[0].props.style.color, "var(--handrail-bug-accent)");
   assert.equal(visibilityButtons[1].props.style.color, "var(--handrail-bug-muted-text)");
-  const filtersButton = renderer.root.findByProps({ children: "Filters" });
-  assert.equal(filtersButton.props["aria-expanded"], true);
-  assert.match(filtersButton.props.style.background, /var\(--handrail-bug-accent\) 8%/u);
+  assert.equal(renderer.root.findAllByProps({ children: "Filters" }).length, 0);
+  assert.equal(renderer.root.findAllByProps({ children: "Close" }).length, 0);
   const viewButton = renderer.root.findByProps({ "aria-label": "View Bug bug-1" });
   const archiveButton = renderer.root.findByProps({ "aria-label": "Archive Bug bug-1" });
   assert.equal(viewButton.props.style.background, "transparent");
@@ -609,6 +614,7 @@ test("My bugs uses the provider history, filters, and individual archive and res
   await act(async () => viewButton.props.onClick());
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-history-detail": "true" }).length, 1);
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-resolution-receipt": "true" }).length, 1);
+  assert.equal(renderer.root.findAll((node) => node.props["data-handrail-bug-journey-milestone"]).length, 6);
   const detailLabels = renderer.root.findByProps({ "data-handrail-bug-history-detail": "true" })
     .findAllByType("strong").map((node) => node.children.join(""));
   assert.ok(detailLabels.includes("Total time"));
@@ -617,6 +623,21 @@ test("My bugs uses the provider history, filters, and individual archive and res
   assert.ok(detailLabels.includes("Released version"));
   assert.ok(detailLabels.includes("Reference"));
   assert.deepEqual(renderer.root.findByProps({ "aria-label": "Bug history visibility" }).findAllByType("button").map((button) => button.children.join("")), ["Active", "Archived"]);
+
+  await act(async () => {
+    renderer.root.findByProps({ "aria-label": "Bug history visibility" }).findAllByType("button")[1].props.onClick();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  const archivedOverview = renderer.root.findByProps({ "data-handrail-bug-history-overview": "true" });
+  assert.deepEqual(
+    archivedOverview.findAllByType("button").map(renderedText),
+    ["All2", "Needs team review0", "Working1", "Finished1", "Could not confirm0"],
+  );
+  assert.equal(archivedOverview.findAllByType("strong").length, 0);
+  await act(async () => {
+    renderer.root.findByProps({ "aria-label": "Bug history visibility" }).findAllByType("button")[0].props.onClick();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
 
   await act(async () => renderer.root.findByProps({ "aria-label": "Archive Bug bug-1" }).props.onClick());
   assert.equal(archived, true);
@@ -678,12 +699,12 @@ test("a submitted bug marks loaded tracking stale and refreshes it when My bugs 
   });
   await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
   await act(async () => {
-    renderer.root.findAllByProps({ role: "tab" })[1].props.onClick();
+    renderer.root.findByProps({ "data-handrail-bug-view-switch": "history" }).props.onClick();
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-history-row": "true" }).length, 1);
 
-  await act(async () => renderer.root.findAllByProps({ role: "tab" })[0].props.onClick());
+  await act(async () => renderer.root.findByProps({ "data-handrail-bug-view-switch": "report" }).props.onClick());
   await act(async () => {
     renderer.root.findByProps({ placeholder: "What is broken?" }).props.onChange({
       target: { value: "New bug" },
@@ -696,7 +717,7 @@ test("a submitted bug marks loaded tracking stale and refreshes it when My bugs 
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-submission-success": "true" }).length, 1);
 
   await act(async () => {
-    renderer.root.findAllByProps({ role: "tab" })[1].props.onClick();
+    renderer.root.findByProps({ "data-handrail-bug-view-switch": "history" }).props.onClick();
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
   assert.equal(requests.filter((request) => request.method === "GET").length, 2);
@@ -760,7 +781,7 @@ test("My bugs refreshes every 15 seconds while the history tab stays open", asyn
   };
 
   try {
-    await act(async () => renderer.root.findAllByProps({ role: "tab" })[1].props.onClick());
+    await act(async () => renderer.root.findByProps({ "data-handrail-bug-view-switch": "history" }).props.onClick());
     assert.equal(intervalDelay, 15_000);
     assert.equal(typeof intervalCallback, "function");
     const callsBeforePoll = listCalls;
@@ -772,7 +793,7 @@ test("My bugs refreshes every 15 seconds while the history tab stays open", asyn
 
     assert.equal(listCalls, callsBeforePoll + 1);
     assert.equal(renderer.root.findAllByProps({ "aria-label": `View Bug poll-${listCalls}` }).length, 1);
-    await act(async () => renderer.root.findAllByProps({ role: "tab" })[0].props.onClick());
+    await act(async () => renderer.root.findByProps({ "data-handrail-bug-view-switch": "report" }).props.onClick());
     assert.equal(intervalCleared, true);
   } finally {
     globalThis.setInterval = originalSetInterval;

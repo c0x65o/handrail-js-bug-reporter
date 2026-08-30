@@ -536,11 +536,16 @@ the typed `--handrail-bug-*` properties directly; direct values take precedence
 over `appearance.tokens`. The built-in launcher installs the same configured
 tokens on itself, so its default primary treatment matches the dialog.
 
-The report and history tabs share one compact desktop dialog height so the
-shell does not resize when users switch views. The description, reproduction,
-and screenshot areas expand to use the available desktop form height. The
-dialog stays bounded by the available viewport, and long forms or tracker
-tables scroll internally. Mobile
+The report form and **My bug reports** view share one compact desktop dialog
+height so the shell does not resize when users switch views. In history, a
+primary **Report a bug** header action returns to the form. Active and Archived
+remain compact secondary tabs; search, status counts and filters, and sorting
+share one toolbar. Reports render as dense Issue, Status, Progress, Impact,
+Updated, and Action rows. Each row shows its current stage and step count, with
+the complete six-stage timeline available in the expanded detail. The
+description, reproduction, and screenshot areas expand to use the available
+desktop form height. The dialog stays bounded by the available viewport, and
+long forms or tracker tables scroll internally. Mobile
 presentation remains full-screen. The configured appearance values are
 installed as scoped `--handrail-bug-*` CSS variables on
 the overlay. `appearance.className` targets the dialog and `appearance.style`
