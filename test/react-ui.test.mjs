@@ -579,19 +579,13 @@ test("My bugs uses the provider history, filters, and individual archive and res
   assert.equal(renderer.root.findByProps({ role: "dialog" }).props.style.height, "min(720px, calc(100dvh - 16px))");
   assert.equal(renderer.root.findByProps({ role: "table" }).props["aria-label"], "Reported bugs");
   const historyHeaders = renderer.root.findAllByProps({ role: "columnheader" }).map((node) => node.children.join(""));
-  assert.deepEqual(historyHeaders, ["Issue", "Status", "Progress", "Impact", "Updated", "Action"]);
+  assert.deepEqual(historyHeaders, ["Issue", "Resolution progress", "Impact", "Reported", "Action"]);
   assert.ok(historyHeaders.includes("Impact"));
   assert.equal(historyHeaders.includes("App version"), false);
   assert.equal(historyHeaders.includes("Date"), false);
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-history-row": "true" }).length, 2);
-  assert.equal(renderer.root.findAll((node) => node.props["data-handrail-bug-journey-milestone"]).length, 0);
-  assert.deepEqual(
-    renderer.root.findAllByType("span").map(renderedText).filter((text) => /^Step \d of 6$/u.test(text)),
-    ["Step 1 of 6", "Step 6 of 6"],
-  );
-  assert.equal(renderer.root.findByProps({ children: "In progress" }).props.style.color, "var(--handrail-bug-info-text)");
-  assert.equal(renderer.root.findByProps({ children: "Resolved" }).props.style.color, "var(--handrail-bug-success-text)");
-  assert.ok(renderer.root.findAllByProps({ "data-handrail-bug-history-row": "true" }).every((row) => row.props.style.height === 76));
+  assert.equal(renderer.root.findAll((node) => node.props["data-handrail-bug-journey-milestone"]).length, 12);
+  assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-resolution-progress": "true" }).length, 2);
   assert.ok(renderer.root.findAllByType("span").some((node) => (
     /^Updated .+ ago$/u.test(node.children.join(""))
   )));
@@ -614,7 +608,7 @@ test("My bugs uses the provider history, filters, and individual archive and res
   await act(async () => viewButton.props.onClick());
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-history-detail": "true" }).length, 1);
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-resolution-receipt": "true" }).length, 1);
-  assert.equal(renderer.root.findAll((node) => node.props["data-handrail-bug-journey-milestone"]).length, 6);
+  assert.equal(renderer.root.findAll((node) => node.props["data-handrail-bug-journey-milestone"]).length, 12);
   const detailLabels = renderer.root.findByProps({ "data-handrail-bug-history-detail": "true" })
     .findAllByType("strong").map((node) => node.children.join(""));
   assert.ok(detailLabels.includes("Total time"));

@@ -119,6 +119,38 @@ const RESPONSIVE_DIALOG_CSS = `
   outline: 2px solid var(--handrail-bug-accent) !important;
   outline-offset: 2px;
 }
+@media (max-width: 1100px) {
+  [data-handrail-bug-history-header="true"] {
+    display: none !important;
+  }
+  [data-handrail-bug-history-row="true"] {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    gap: 8px 14px !important;
+    padding: 14px !important;
+  }
+  [data-handrail-bug-history-cell="issue"] {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  [data-handrail-bug-history-cell="secondary"] {
+    display: none !important;
+  }
+  [data-handrail-bug-history-cell="status"] {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  [data-handrail-bug-history-cell="journey"] {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+  [data-handrail-bug-history-cell="action"] {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+  [data-handrail-bug-history-detail="true"] {
+    grid-column: 1 / -1;
+  }
+}
 @media (max-width: 860px) {
   [data-handrail-bug-report-panel="true"],
   [data-handrail-bug-report-form="true"] {
@@ -141,40 +173,8 @@ const RESPONSIVE_DIALOG_CSS = `
   [data-handrail-bug-context="true"] {
     order: -1;
   }
-  [data-handrail-bug-history-header="true"] {
-    display: none !important;
-  }
-  [data-handrail-bug-history-row="true"] {
-    height: auto !important;
-    grid-template-columns: minmax(0, 1fr) auto !important;
-    gap: 8px 14px !important;
-    padding: 14px !important;
-  }
   [data-handrail-bug-resolution-receipt="true"] {
     grid-template-columns: minmax(0, 1fr) !important;
-  }
-  [data-handrail-bug-history-cell="issue"] {
-    grid-column: 1;
-    grid-row: 1;
-  }
-  [data-handrail-bug-history-cell="status"] {
-    grid-column: 1 / -1;
-    grid-row: 2;
-  }
-  [data-handrail-bug-history-cell="progress"] {
-    grid-column: 1 / -1;
-    grid-row: 3;
-  }
-  [data-handrail-bug-history-cell="impact"],
-  [data-handrail-bug-history-cell="updated"] {
-    grid-column: 1 / -1;
-  }
-  [data-handrail-bug-history-cell="action"] {
-    grid-column: 2;
-    grid-row: 1;
-  }
-  [data-handrail-bug-history-detail="true"] {
-    grid-column: 1 / -1;
   }
 }
 @media (max-width: 560px) {
@@ -511,12 +511,10 @@ const styles: Record<string, CSSProperties> = {
   },
   historyItem: {
     display: "grid",
-    gridTemplateColumns: "minmax(240px, 1.55fr) minmax(120px, .72fr) minmax(170px, .95fr) minmax(90px, .5fr) minmax(125px, .68fr) 124px",
+    gridTemplateColumns: "minmax(200px, 1.4fr) minmax(540px, 3.7fr) minmax(90px, .65fr) minmax(130px, .9fr) 124px",
     alignItems: "center",
-    gap: 12,
-    minHeight: 76,
-    padding: "8px 12px",
-    boxSizing: "border-box",
+    gap: 14,
+    padding: "12px 14px",
     borderBottom: "1px solid var(--handrail-bug-border)",
     background: "var(--handrail-bug-surface)",
   },
@@ -532,9 +530,9 @@ const styles: Record<string, CSSProperties> = {
     top: 0,
     zIndex: 2,
     display: "grid",
-    gridTemplateColumns: "minmax(240px, 1.55fr) minmax(120px, .72fr) minmax(170px, .95fr) minmax(90px, .5fr) minmax(125px, .68fr) 124px",
-    gap: 12,
-    padding: "8px 12px",
+    gridTemplateColumns: "minmax(200px, 1.4fr) minmax(540px, 3.7fr) minmax(90px, .65fr) minmax(130px, .9fr) 124px",
+    gap: 14,
+    padding: "9px 14px",
     borderBottom: "1px solid var(--handrail-bug-border)",
     color: "var(--handrail-bug-muted-text)",
     background: "var(--handrail-bug-surface-muted)",
@@ -801,40 +799,6 @@ function journeyForBug(bug: TrackedBugRecord): BugResolutionJourney {
   return bug.resolution_journey || fallbackJourney(bug);
 }
 
-function journeyProgress(journey: BugResolutionJourney): {
-  readonly label: string;
-  readonly step: number;
-  readonly total: number;
-} {
-  const activeIndex = journey.milestones.findIndex((milestone) => (
-    milestone.state === "current" || milestone.state === "stopped"
-  ));
-  const lastCompletedIndex = journey.milestones.reduce(
-    (latest, milestone, index) => milestone.state === "complete" ? index : latest,
-    -1,
-  );
-  const index = activeIndex >= 0
-    ? activeIndex
-    : Math.max(0, lastCompletedIndex);
-  const total = Math.max(1, journey.milestones.length);
-  return {
-    label: journey.milestones[index]?.label || journey.headline,
-    step: Math.min(index + 1, total),
-    total,
-  };
-}
-
-function bugStatusLabel(
-  group: BugTrackingStatusGroup,
-  journey: BugResolutionJourney,
-): string {
-  if (journey.outcome === "resolved") return "Resolved";
-  if (group === "needs_attention") return "Needs review";
-  if (group === "not_reproduced") return "Not confirmed";
-  if (group === "closed") return "Closed";
-  return "In progress";
-}
-
 function bugDuration(milliseconds: number | null): string {
   if (milliseconds === null) return "—";
   const seconds = Math.max(0, Math.round(milliseconds / 1_000));
@@ -943,50 +907,28 @@ function BugHistoryRow({
   const group = bugStatusGroup(bug);
   const statusTimestamp = bug.status_rollup.updated_at || bug.updated_at;
   const journey = journeyForBug(bug);
-  const progress = journeyProgress(journey);
   const resolved = journey.outcome === "resolved";
-  const progressColor = resolved
-    ? "var(--handrail-bug-success-text)"
-    : journey.outcome === "needs_attention"
-      ? "var(--handrail-bug-warning-text)"
-      : journey.outcome === "not_reproduced"
-        ? "var(--handrail-bug-muted-text)"
-        : "var(--handrail-bug-accent)";
-  return <article
-    role="row"
-    data-handrail-bug-history-row="true"
-    style={{ ...styles.historyItem, height: expanded ? undefined : 76 }}
-  >
+  return <article role="row" data-handrail-bug-history-row="true" style={styles.historyItem}>
     <div role="cell" data-handrail-bug-history-cell="issue" style={{ minWidth: 0 }}>
       <strong style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 13, lineHeight: 1.35 }}>{bug.title}</strong>
-      <span title={bug.reported_route || undefined} style={{ display: "block", overflow: "hidden", marginTop: 4, color: "var(--handrail-bug-muted-text)", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 10 }}>
-        {bug.reported_route || "Page unavailable"}
-        {bug.reported_app_version ? ` · v${bug.reported_app_version.replace(/^v/iu, "")}` : ""}
-        {bug.reporter_occurrence_count > 1 ? ` · ${bug.reporter_occurrence_count} reports` : ""}
-      </span>
+      <span title={bug.reported_route || undefined} style={{ display: "block", overflow: "hidden", marginTop: 3, color: "var(--handrail-bug-muted-text)", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 10 }}>{bug.reported_route || "Page unavailable"}{bug.reported_app_version ? ` · v${bug.reported_app_version.replace(/^v/iu, "")}` : ""}</span>
+      {bug.reporter_occurrence_count > 1 && <span style={{ display: "block", marginTop: 3, color: "var(--handrail-bug-muted-text)", fontSize: 10 }}>{bug.reporter_occurrence_count} reports</span>}
     </div>
-    <div role="cell" data-handrail-bug-history-cell="status" style={{ minWidth: 0 }}>
-      <span style={{ display: "inline-flex", alignItems: "center", maxWidth: "100%", padding: "4px 8px", border: "1px solid", borderRadius: 999, boxSizing: "border-box", fontSize: 10, fontWeight: 800, lineHeight: 1.2, ...statusBadgeStyle(group, journey.headline, resolved) }}>
-        {bugStatusLabel(group, journey)}
-      </span>
+    <div role="cell" data-handrail-bug-history-cell="journey" style={{ minWidth: 0, overflowX: "auto", padding: "3px 0" }}>
+      <BugResolutionProgress bug={bug} />
     </div>
-    <div role="cell" data-handrail-bug-history-cell="progress" style={{ display: "grid", gap: 4, minWidth: 0 }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, minWidth: 0 }}>
-        <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 11 }}>{progress.label}</strong>
-        <span style={{ flex: "0 0 auto", color: "var(--handrail-bug-muted-text)", fontSize: 9 }}>Step {progress.step} of {progress.total}</span>
-      </div>
-      <span aria-hidden="true" style={{ height: 3, overflow: "hidden", borderRadius: 999, background: "var(--handrail-bug-surface-muted)" }}>
-        <span style={{ display: "block", width: `${(progress.step / progress.total) * 100}%`, height: "100%", borderRadius: 999, background: progressColor }} />
-      </span>
-    </div>
-    <div role="cell" data-handrail-bug-history-cell="impact" style={{ minWidth: 0, color: "var(--handrail-bug-muted-text)", fontSize: 11 }}>
+    <div role="cell" data-handrail-bug-history-cell="secondary" style={{ minWidth: 0, color: "var(--handrail-bug-muted-text)", fontSize: 11 }}>
       <span style={{ display: "flex", alignItems: "center", gap: 7 }}><span aria-hidden="true" style={{ width: 7, height: 7, flex: "0 0 7px", borderRadius: 999, background: severityColor(bug.severity) }} />{bugSeverityLabel(bug.severity)}</span>
+      {journey.handling === "automatic" && <strong style={{ display: "block", marginTop: 5, color: "var(--handrail-bug-success-text)", fontSize: 9 }}>Handled automatically</strong>}
+      {journey.handling === "team_review" && <strong style={{ display: "block", marginTop: 5, color: "var(--handrail-bug-warning-text)", fontSize: 9 }}>Team review</strong>}
     </div>
-    <div role="cell" data-handrail-bug-history-cell="updated" style={{ minWidth: 0 }}>
-      <span title={bugDate(statusTimestamp)} style={{ color: "var(--handrail-bug-muted-text)", fontSize: 10 }}>{bugRelativeAge(statusTimestamp)}</span>
+    <div role="cell" data-handrail-bug-history-cell="status" style={{ display: "grid", gap: 5, minWidth: 0 }}>
+      <span title={bugDate(bug.last_reported_at)} style={{ color: "var(--handrail-bug-muted-text)", fontSize: 10 }}>{bugRelativeAge(bug.last_reported_at)}</span>
+      <span style={{ overflow: "hidden", maxWidth: "100%", padding: "3px 7px", border: "1px solid", borderRadius: 6, textAlign: "center", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 9, fontWeight: 800, ...statusBadgeStyle(group, bug.status_rollup.label, resolved) }}>{journey.headline}</span>
+      {journey.total_duration_ms !== null && <strong title={bugDate(statusTimestamp)} style={{ color: resolved ? "var(--handrail-bug-success-text)" : "var(--handrail-bug-muted-text)", fontSize: 9 }}>in {bugDuration(journey.total_duration_ms)}</strong>}
     </div>
     <div role="cell" data-handrail-bug-history-cell="action" style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
-      <button type="button" aria-expanded={expanded} aria-label={`View ${bug.title}`} onClick={() => onToggle(bug.id)} style={styles.historyActionButton}>{expanded ? "Hide" : "Details"}</button>
+      <button type="button" aria-expanded={expanded} aria-label={`View ${bug.title}`} onClick={() => onToggle(bug.id)} style={styles.historyActionButton}>{expanded ? "Hide" : "View"}</button>
       <button
         type="button"
         disabled={busy}
@@ -1003,10 +945,7 @@ function BugHistoryRow({
         {busy ? "Updating…" : bug.archived ? "Restore" : "Archive"}
       </button>
     </div>
-    {expanded && <div role="cell" data-handrail-bug-history-detail="true" style={{ gridColumn: "1 / -1", display: "grid", gap: 14, minWidth: 0, padding: "14px 0 6px", borderTop: "1px solid var(--handrail-bug-border)" }}>
-      <BugResolutionProgress bug={bug} />
-      <BugResolutionReceipt bug={bug} />
-    </div>}
+    {expanded && <div role="cell" data-handrail-bug-history-detail="true" style={{ display: "contents" }}><BugResolutionReceipt bug={bug} /></div>}
   </article>;
 }
 
@@ -1204,7 +1143,7 @@ function BugHistory(): ReactElement {
     {reporter.tracking.status === "error" && !historyActionError && <div role="alert" style={{ ...styles.status, background: "var(--handrail-bug-danger-surface)", color: "var(--handrail-bug-danger-text)" }}>{reporter.tracking.error?.message || "Bug history could not be loaded."}</div>}
     {showHistoryResults && <div role="table" aria-label="Reported bugs" data-handrail-bug-history-list="true" style={{ ...styles.historyList, flex: "1 1 auto", opacity: reporter.tracking.status === "loading" ? 0.68 : 1 }}>
       <div role="row" data-handrail-bug-history-header="true" style={styles.historyListHeader}>
-        <span role="columnheader">Issue</span><span role="columnheader">Status</span><span role="columnheader">Progress</span><span role="columnheader">Impact</span><span role="columnheader">Updated</span><span role="columnheader">Action</span>
+        <span role="columnheader">Issue</span><span role="columnheader">Resolution progress</span><span role="columnheader">Impact</span><span role="columnheader">Reported</span><span role="columnheader">Action</span>
       </div>
       {reporter.tracking.bugs.length === 0
         ? <div role="status" style={{ padding: "24px 12px", color: "var(--handrail-bug-muted-text)", textAlign: "center" }}>

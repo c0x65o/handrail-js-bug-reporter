@@ -540,9 +540,10 @@ The report form and **My bug reports** view share one compact desktop dialog
 height so the shell does not resize when users switch views. In history, a
 primary **Report a bug** header action returns to the form. Active and Archived
 remain compact secondary tabs; search, status counts and filters, and sorting
-share one toolbar. Reports render as dense Issue, Status, Progress, Impact,
-Updated, and Action rows. Each row shows its current stage and step count, with
-the complete six-stage timeline available in the expanded detail. The
+share one toolbar. Every report keeps the complete six-stage resolution
+timeline visible—Reported, Confirmed, Corrected, Safety checked, Released, and
+Confirmed resolved—alongside its impact, reported time, and actions. Expanded
+details provide the resolution receipt. The
 description, reproduction, and screenshot areas expand to use the available
 desktop form height. The dialog stays bounded by the available viewport, and
 long forms or tracker tables scroll internally. Mobile
