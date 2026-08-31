@@ -1583,6 +1583,7 @@ export function HandrailBugReporterDialog({
   const [tab, setTab] = useState<DialogTab>("report");
   const dialogRef = useRef<HTMLElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const policyRefreshAttemptedForOpenRef = useRef(false);
   const historyPreloadedForOpenRef = useRef(false);
   const headingId = useId();
   const descriptionId = useId();
@@ -1604,6 +1605,19 @@ export function HandrailBugReporterDialog({
       previousFocusRef.current = null;
     };
   }, [open]);
+
+  useEffect(() => {
+    if (!open) {
+      policyRefreshAttemptedForOpenRef.current = false;
+      return;
+    }
+    if (
+      policyRefreshAttemptedForOpenRef.current
+      || reporter.policyStatus !== "unavailable"
+    ) return;
+    policyRefreshAttemptedForOpenRef.current = true;
+    void reporter.refreshPolicy().catch(() => undefined);
+  }, [open, reporter.policyStatus, reporter.refreshPolicy]);
 
   useEffect(() => {
     if (!open) {

@@ -145,6 +145,48 @@ test("the packaged UI is opt-in and the launcher mounts a separate dialog", asyn
   await act(async () => renderer.unmount());
 });
 
+test("opening the dialog retries unavailable policy once per open cycle", async () => {
+  let policyRequests = 0;
+  const reporterConfig = config(async (url) => {
+    if (!String(url).includes("/policy")) {
+      return jsonResponse({ bugs: [], next_cursor: null, total: 0 });
+    }
+    policyRequests += 1;
+    return policyRequests < 3
+      ? jsonResponse({ error: "identity is not ready" }, 401)
+      : jsonResponse(reporterPolicy);
+  });
+  const tree = (open) => createElement(
+    HandrailBugReporterProvider,
+    { config: reporterConfig },
+    createElement(HandrailBugReporterDialog, {
+      open,
+      onClose: () => undefined,
+      showHistory: false,
+    }),
+  );
+
+  let renderer;
+  await act(async () => { renderer = create(tree(false)); });
+  assert.equal(policyRequests, 1);
+
+  await act(async () => { renderer.update(tree(true)); });
+  assert.equal(policyRequests, 2);
+  assert.equal(
+    renderer.root.findAllByProps({ "data-handrail-bug-access-summary": "true" }).length,
+    0,
+  );
+  await act(async () => { await new Promise((resolve) => setImmediate(resolve)); });
+  assert.equal(policyRequests, 2, "an unavailable policy must not cause a refresh loop");
+
+  await act(async () => { renderer.update(tree(false)); });
+  await act(async () => { renderer.update(tree(true)); });
+  assert.equal(policyRequests, 3);
+  renderer.root.findByProps({ "data-handrail-bug-access-summary": "true" });
+
+  await act(async () => renderer.unmount());
+});
+
 test("a controlled host theme can switch the packaged UI from light to dark", async () => {
   const dialog = (themeMode) => renderInsideProvider(
     createElement(HandrailBugReporterDialog, {
