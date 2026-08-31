@@ -344,7 +344,7 @@ test("the packaged form delegates upload, paste, drop, thumbnail, policy, automa
   assert.equal(renderer.root.findByProps({ "aria-label": "View attached screenshot larger" }).props["aria-expanded"], true);
   const lightbox = renderer.root.findByProps({ "data-handrail-bug-screenshot-lightbox": "true" });
   assert.equal(lightbox.props.role, "dialog");
-  assert.equal(lightbox.props["aria-modal"], true);
+  assert.equal(lightbox.props["aria-modal"], "true");
   assert.equal(renderer.root.findAllByProps({ alt: "Attached screenshot enlarged" }).length, 1);
   let previewEscapePrevented = 0;
   let previewEscapeStopped = 0;
@@ -646,7 +646,7 @@ test("My bugs uses the provider history, filters, and individual archive and res
   const archivedOverview = renderer.root.findByProps({ "data-handrail-bug-history-overview": "true" });
   assert.deepEqual(
     archivedOverview.findAllByType("button").map(renderedText),
-    ["All2", "Needs team review0", "Working1", "Finished1", "Could not confirm0"],
+    ["All 2", "Needs team review 0", "Working 1", "Finished 1", "Could not confirm 0"],
   );
   assert.equal(archivedOverview.findAllByType("strong").length, 0);
   await act(async () => {
