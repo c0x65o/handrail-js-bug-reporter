@@ -127,6 +127,7 @@ function resolutionJourney(overrides = {}) {
     headline: "Confirmed resolved",
     outcome: "resolved",
     handling: "automatic",
+    next_step: null,
     started_at: "2026-08-13T17:50:00.000Z",
     completed_at: "2026-08-13T18:00:00.000Z",
     total_duration_ms: 600_000,
@@ -158,7 +159,13 @@ test("history accepts a frozen safe resolution journey and ignores malformed opt
       bugs: [trackedBug({
         resolution_journey: malformed
           ? resolutionJourney({ milestones: [{ key: "reported" }] })
-          : resolutionJourney(),
+          : resolutionJourney({
+              next_step: {
+                kind: "read_only_runtime_diagnosis",
+                label: "Read-only diagnosis required",
+                summary: "The team needs a safe state comparison before selecting a fix.",
+              },
+            }),
       })],
       summary: { total: 1, needs_attention: 0, in_progress: 1, closed: 0, not_reproduced: 0 },
       query: { search: null, status_group: null, sort: "newest", visibility: "active" },
@@ -170,6 +177,9 @@ test("history accepts a frozen safe resolution journey and ignores malformed opt
   assert.equal(valid.bugs[0].resolution_journey.headline, "Confirmed resolved");
   assert.equal(valid.bugs[0].resolution_journey.milestones.length, 6);
   assert.equal(valid.bugs[0].resolution_journey.total_duration_ms, 600_000);
+  assert.equal(valid.bugs[0].resolution_journey.next_step.kind, "read_only_runtime_diagnosis");
+  assert.equal(valid.bugs[0].resolution_journey.next_step.label, "Read-only diagnosis required");
+  assert.ok(Object.isFrozen(valid.bugs[0].resolution_journey.next_step));
   assert.ok(Object.isFrozen(valid.bugs[0].resolution_journey));
   assert.ok(Object.isFrozen(valid.bugs[0].resolution_journey.milestones));
 

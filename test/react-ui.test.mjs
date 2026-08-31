@@ -107,6 +107,40 @@ function trackedBug(id, archived = false) {
   };
 }
 
+function readOnlyDiagnosisJourney() {
+  const keys = ["reported", "confirmed", "corrected", "checked", "released", "confirmed_resolved"];
+  return {
+    schema_version: 1,
+    headline: "Read-only diagnosis required",
+    outcome: "needs_attention",
+    handling: "team_review",
+    next_step: {
+      kind: "read_only_runtime_diagnosis",
+      label: "Read-only diagnosis required",
+      summary: "The issue cannot be replayed safely. The team needs a read-only state comparison before selecting a fix.",
+    },
+    started_at: "2026-08-13T18:00:00.000Z",
+    completed_at: null,
+    total_duration_ms: null,
+    verification_method: "source_code_audit",
+    verification_label: "Application source review",
+    release_environment: null,
+    fixed_version: null,
+    released_version: null,
+    automatic_fix_authorized: false,
+    automatic_delivery_authorized: false,
+    approval_required: false,
+    milestones: keys.map((key, index) => ({
+      key,
+      label: index === 1 ? "Read-only diagnosis required" : ["Reported", "Confirmed", "Corrected", "Safety checked", "Released", "Confirmed resolved"][index],
+      state: index === 0 ? "complete" : index === 1 ? "stopped" : "upcoming",
+      started_at: index === 0 ? "2026-08-13T18:00:00.000Z" : null,
+      completed_at: index === 0 ? "2026-08-13T18:00:00.000Z" : null,
+      duration_ms: index === 0 ? 0 : null,
+    })),
+  };
+}
+
 test("the packaged UI is opt-in and the launcher mounts a separate dialog", async () => {
   let renderer;
   await act(async () => {
@@ -597,7 +631,7 @@ test("My bugs uses the provider history, filters, and individual archive and res
     return jsonResponse({
       contract_version: "v1",
       bugs: [
-        trackedBug("bug-1", archived),
+        { ...trackedBug("bug-1", archived), resolution_journey: readOnlyDiagnosisJourney() },
         {
           ...closedBug,
           fixed_at: "2026-08-14T18:00:00.000Z",
@@ -671,6 +705,8 @@ test("My bugs uses the provider history, filters, and individual archive and res
   await act(async () => viewButton.props.onClick());
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-history-detail": "true" }).length, 1);
   assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-resolution-receipt": "true" }).length, 1);
+  assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-next-step": "true" }).length, 1);
+  assert.match(renderedText(renderer.root.findByProps({ "data-handrail-bug-next-step": "true" })), /read-only state comparison/i);
   assert.equal(renderer.root.findAll((node) => node.props["data-handrail-bug-journey-milestone"]).length, 12);
   const detailLabels = renderer.root.findByProps({ "data-handrail-bug-history-detail": "true" })
     .findAllByType("strong").map((node) => node.children.join(""));

@@ -801,6 +801,7 @@ function fallbackJourney(bug: TrackedBugRecord): BugResolutionJourney {
       : bug.status_rollup.stage === "closed" && !resolved ? "closed"
         : stopped ? "needs_attention" : resolved ? "resolved" : "in_progress",
     handling: "unknown",
+    next_step: null,
     started_at: bug.first_reported_at,
     completed_at: resolved ? bug.status_rollup.updated_at : null,
     total_duration_ms: null,
@@ -908,6 +909,10 @@ function BugResolutionReceipt({ bug }: { readonly bug: TrackedBugRecord }): Reac
     <div>
       <div style={{ color: "var(--handrail-bug-muted-text)", fontSize: 10, fontWeight: 900, letterSpacing: ".08em", textTransform: "uppercase" }}>How Handrail handled it</div>
       <h4 style={{ margin: "5px 0 7px", fontSize: 17 }}>{journey.headline}</h4>
+      {journey.next_step && <div data-handrail-bug-next-step="true" style={{ margin: "0 0 9px", padding: "9px 10px", border: "1px solid var(--handrail-bug-warning-text)", borderRadius: 8, background: "var(--handrail-bug-warning-surface)", color: "var(--handrail-bug-warning-text)", fontSize: 11, lineHeight: 1.45 }}>
+        <strong style={{ display: "block", marginBottom: 2 }}>Next step: {journey.next_step.label}</strong>
+        <span>{journey.next_step.summary}</span>
+      </div>}
       {facts.length > 0
         ? <ul style={{ display: "grid", gap: 5, margin: 0, padding: 0, listStyle: "none", color: "var(--handrail-bug-muted-text)", fontSize: 11 }}>{facts.map((fact) => <li key={fact}><span aria-hidden="true" style={{ marginRight: 7, color: completedTone, fontWeight: 900 }}>✓</span>{fact}</li>)}</ul>
         : <p style={{ margin: 0, color: "var(--handrail-bug-muted-text)", fontSize: 11 }}>Handrail will add verification, safety, and release receipts as this report progresses.</p>}

@@ -260,11 +260,18 @@ export interface BugResolutionMilestone {
   readonly duration_ms: number | null;
 }
 
+export interface BugResolutionNextStep {
+  readonly kind: "read_only_runtime_diagnosis" | "scoped_diagnosis" | "owner_decision";
+  readonly label: string;
+  readonly summary: string;
+}
+
 export interface BugResolutionJourney {
   readonly schema_version: 1;
   readonly headline: string;
   readonly outcome: "in_progress" | "resolved" | "needs_attention" | "not_reproduced" | "closed";
   readonly handling: "automatic" | "team_review" | "unknown";
+  readonly next_step: BugResolutionNextStep | null;
   readonly started_at: string | null;
   readonly completed_at: string | null;
   readonly total_duration_ms: number | null;
@@ -1022,11 +1029,20 @@ function bugResolutionJourney(input: unknown): BugResolutionJourney | null {
     ? null
     : nonNegativeNumber(record.total_duration_ms, Number.NaN);
   if (totalDuration !== null && !Number.isFinite(totalDuration)) return null;
+  const nextStepRecord = plainRecord(record.next_step);
+  const nextStepKind = nullableString(nextStepRecord?.kind) as BugResolutionNextStep["kind"] | null;
+  const nextStepLabel = nullableString(nextStepRecord?.label);
+  const nextStepSummary = nullableString(nextStepRecord?.summary);
+  const nextStep = nextStepRecord && nextStepKind && nextStepLabel && nextStepSummary
+    && ["read_only_runtime_diagnosis", "scoped_diagnosis", "owner_decision"].includes(nextStepKind)
+    ? Object.freeze({ kind: nextStepKind, label: nextStepLabel, summary: nextStepSummary })
+    : null;
   return Object.freeze({
     schema_version: 1,
     headline,
     outcome,
     handling,
+    next_step: nextStep,
     started_at: nullableString(record.started_at),
     completed_at: nullableString(record.completed_at),
     total_duration_ms: totalDuration,
