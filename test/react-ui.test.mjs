@@ -335,6 +335,25 @@ test("the packaged form delegates upload, paste, drop, thumbnail, policy, automa
   assert.equal(renderer.root.findAllByProps({ alt: "Bug report screenshot preview" }).length, 1);
   assert.equal(renderer.root.findByProps({ alt: "Bug report screenshot preview" }).props.style.width, 144);
   assert.equal(renderer.root.findByProps({ alt: "Bug report screenshot preview" }).props.style.height, 90);
+  const previewButton = renderer.root.findByProps({ "aria-label": "View attached screenshot larger" });
+  assert.equal(previewButton.props["aria-haspopup"], "dialog");
+  assert.equal(previewButton.props["aria-expanded"], false);
+  await act(async () => previewButton.props.onClick());
+  assert.equal(renderer.root.findByProps({ "aria-label": "View attached screenshot larger" }).props["aria-expanded"], true);
+  const lightbox = renderer.root.findByProps({ "data-handrail-bug-screenshot-lightbox": "true" });
+  assert.equal(lightbox.props.role, "dialog");
+  assert.equal(lightbox.props["aria-modal"], true);
+  assert.equal(renderer.root.findAllByProps({ alt: "Attached screenshot enlarged" }).length, 1);
+  let previewEscapePrevented = 0;
+  let previewEscapeStopped = 0;
+  await act(async () => lightbox.props.onKeyDown({
+    key: "Escape",
+    preventDefault: () => { previewEscapePrevented += 1; },
+    stopPropagation: () => { previewEscapeStopped += 1; },
+  }));
+  assert.equal(previewEscapePrevented, 1);
+  assert.equal(previewEscapeStopped, 1);
+  assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-screenshot-lightbox": "true" }).length, 0);
   assert.equal(renderer.root.findAllByProps({ children: "Replace" }).length, 1);
   assert.equal(renderer.root.findAllByProps({ children: "Remove" }).length, 1);
 

@@ -441,6 +441,37 @@ const styles: Record<string, CSSProperties> = {
     objectFit: "cover",
     background: "var(--handrail-bug-surface-muted)",
   },
+  screenshotPreviewButton: {
+    flex: "0 0 144px",
+    margin: 0,
+    padding: 0,
+    border: 0,
+    borderRadius: 8,
+    background: "transparent",
+    cursor: "zoom-in",
+    font: "inherit",
+  },
+  screenshotLightbox: {
+    position: "fixed",
+    inset: 0,
+    zIndex: 20,
+    display: "grid",
+    placeItems: "center",
+    boxSizing: "border-box",
+    padding: 56,
+    background: "var(--handrail-bug-overlay)",
+    backdropFilter: "blur(3px)",
+  },
+  screenshotLightboxImage: {
+    display: "block",
+    maxWidth: "min(1200px, calc(100vw - 48px))",
+    maxHeight: "calc(100dvh - 96px)",
+    border: "1px solid var(--handrail-bug-border)",
+    borderRadius: 10,
+    objectFit: "contain",
+    background: "var(--handrail-bug-surface)",
+    boxShadow: "0 24px 80px rgba(0, 0, 0, 0.4)",
+  },
   formActions: {
     position: "sticky",
     bottom: -20,
@@ -1172,8 +1203,10 @@ function BugReportForm({ onCancel }: { readonly onCancel: () => void }): ReactEl
   const successHeadingId = useId();
   const [localError, setLocalError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [screenshotPreviewOpen, setScreenshotPreviewOpen] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const screenshotPreviewButtonRef = useRef<HTMLButtonElement | null>(null);
   const message = submissionMessage(reporter.submission);
   const notificationEligibility = reporter.policy?.reporterNotifications;
   const notificationsAvailable = notificationEligibility?.available === true;
@@ -1205,6 +1238,7 @@ function BugReportForm({ onCancel }: { readonly onCancel: () => void }): ReactEl
     const screenshot = reporter.form.screenshot;
     if (!screenshot) {
       setPreviewUrl(null);
+      setScreenshotPreviewOpen(false);
       return undefined;
     }
     const preview = screenshotPreviewUrl(screenshot);
@@ -1220,6 +1254,11 @@ function BugReportForm({ onCancel }: { readonly onCancel: () => void }): ReactEl
       }
     };
   }, [reporter.form.screenshot]);
+
+  const closeScreenshotPreview = () => {
+    setScreenshotPreviewOpen(false);
+    screenshotPreviewButtonRef.current?.focus();
+  };
 
   const attachScreenshot = (file: File): boolean => {
     setLocalError(null);
@@ -1414,7 +1453,17 @@ function BugReportForm({ onCancel }: { readonly onCancel: () => void }): ReactEl
       />
       {reporter.form.screenshot ? <div style={styles.screenshotPreview}>
         {previewUrl
-          ? <img src={previewUrl} alt="Bug report screenshot preview" style={styles.screenshotThumbnail} />
+          ? <button
+              ref={screenshotPreviewButtonRef}
+              type="button"
+              aria-label="View attached screenshot larger"
+              aria-haspopup="dialog"
+              aria-expanded={screenshotPreviewOpen}
+              onClick={() => setScreenshotPreviewOpen(true)}
+              style={styles.screenshotPreviewButton}
+            >
+              <img src={previewUrl} alt="Bug report screenshot preview" style={{ ...styles.screenshotThumbnail, display: "block" }} />
+            </button>
           : <div role="img" aria-label="Screenshot preview unavailable" style={{ ...styles.screenshotThumbnail, display: "grid", placeItems: "center", color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>Preview unavailable</div>}
         <div style={{ flex: "1 1 180px", minWidth: 0 }}>
           <strong style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{reporter.form.screenshot.filename || "Attached screenshot"}</strong>
@@ -1435,6 +1484,40 @@ function BugReportForm({ onCancel }: { readonly onCancel: () => void }): ReactEl
       }}><span aria-hidden="true" style={{ marginRight: 8, fontSize: 20 }}>+</span>Add or paste a screenshot</button>}
         </div>}
       </section>
+
+      {screenshotPreviewOpen && previewUrl && <section
+        data-handrail-bug-screenshot-lightbox="true"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Attached screenshot preview"
+        tabIndex={-1}
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) closeScreenshotPreview();
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
+            closeScreenshotPreview();
+            return;
+          }
+          if (event.key === "Tab") {
+            event.preventDefault();
+            event.stopPropagation();
+            event.currentTarget.querySelector<HTMLElement>(focusableSelector)?.focus();
+          }
+        }}
+        style={styles.screenshotLightbox}
+      >
+        <button
+          type="button"
+          aria-label="Close screenshot preview"
+          autoFocus
+          onClick={closeScreenshotPreview}
+          style={{ ...buttonStyle("secondary"), position: "absolute", top: 16, right: 16, width: 40, height: 40, padding: 0, fontSize: 22, lineHeight: 1 }}
+        >×</button>
+        <img src={previewUrl} alt="Attached screenshot enlarged" style={styles.screenshotLightboxImage} />
+      </section>}
 
       <aside data-handrail-bug-context="true" aria-label="Attached context and options" style={{ display: "grid", alignSelf: "start", gap: 10 }}>
         <section style={{ overflow: "hidden", border: "1px solid var(--handrail-bug-border)", borderRadius: 9, background: "var(--handrail-bug-surface)" }}>

@@ -491,7 +491,8 @@ that reflects the route, app version, and environment supplied by the
 application. Supply application-owned context through `initialForm`; the UI
 never claims or displays context it did not receive. It includes one
 validated PNG/JPEG screenshot by styled upload, direct
-clipboard paste, or drag and drop, an immediate thumbnail with Replace/Remove
+clipboard paste, or drag and drop, an immediate thumbnail that opens a larger
+preview when clicked, with Replace/Remove
 actions, policy-derived Ask controls,
 an unchecked report-scoped update consent control when the verified user is
 eligible, and an owned **My bugs** view with search, status/visibility/sort
