@@ -338,6 +338,8 @@ test("the packaged form delegates upload, paste, drop, thumbnail, policy, automa
   const previewButton = renderer.root.findByProps({ "aria-label": "View attached screenshot larger" });
   assert.equal(previewButton.props["aria-haspopup"], "dialog");
   assert.equal(previewButton.props["aria-expanded"], false);
+  assert.equal(renderer.root.findAllByProps({ "data-handrail-bug-image-expand-affordance": "true" }).length, 1);
+  assert.match(renderedText(renderer.root.findByProps({ "data-handrail-bug-image-expand-affordance": "true" })), /View/u);
   await act(async () => previewButton.props.onClick());
   assert.equal(renderer.root.findByProps({ "aria-label": "View attached screenshot larger" }).props["aria-expanded"], true);
   const lightbox = renderer.root.findByProps({ "data-handrail-bug-screenshot-lightbox": "true" });

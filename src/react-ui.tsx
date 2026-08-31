@@ -442,11 +442,13 @@ const styles: Record<string, CSSProperties> = {
     background: "var(--handrail-bug-surface-muted)",
   },
   screenshotPreviewButton: {
+    position: "relative",
     flex: "0 0 144px",
     margin: 0,
     padding: 0,
     border: 0,
     borderRadius: 8,
+    overflow: "hidden",
     background: "transparent",
     cursor: "zoom-in",
     font: "inherit",
@@ -1463,6 +1465,11 @@ function BugReportForm({ onCancel }: { readonly onCancel: () => void }): ReactEl
               style={styles.screenshotPreviewButton}
             >
               <img src={previewUrl} alt="Bug report screenshot preview" style={{ ...styles.screenshotThumbnail, display: "block" }} />
+              <span
+                data-handrail-bug-image-expand-affordance="true"
+                aria-hidden="true"
+                style={{ position: "absolute", right: 6, bottom: 6, display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 6px", borderRadius: 999, color: "var(--handrail-bug-accent-text)", background: "var(--handrail-bug-accent)", boxShadow: "0 1px 4px rgba(0, 0, 0, 0.28)", fontSize: 9, fontWeight: 800, lineHeight: 1 }}
+              ><span style={{ fontSize: 12 }}>↗</span> View</span>
             </button>
           : <div role="img" aria-label="Screenshot preview unavailable" style={{ ...styles.screenshotThumbnail, display: "grid", placeItems: "center", color: "var(--handrail-bug-muted-text)", fontSize: 12 }}>Preview unavailable</div>}
         <div style={{ flex: "1 1 180px", minWidth: 0 }}>
