@@ -103,12 +103,12 @@ test("release commit resolves from npm's exact public Git source", () => {
   assert.equal(
     resolveReleaseCommit(
       undefined,
-      `git+https://github.com/c0x65o/handrail-js-bug-reporter.git#${commit}`,
+      `git+https://github.com/c0x65o/handrail-sdk-bug-reporter-js.git#${commit}`,
     ),
     commit,
   );
   assert.equal(
-    resolveReleaseCommit(`github:c0x65o/handrail-js-bug-reporter#${commit}`),
+    resolveReleaseCommit(`github:c0x65o/handrail-sdk-bug-reporter-js#${commit}`),
     commit,
   );
   assert.equal(resolveReleaseCommit("/tmp/npm-git-checkout"), undefined);
